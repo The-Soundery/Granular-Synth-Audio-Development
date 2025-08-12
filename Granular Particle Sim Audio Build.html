@@ -1,0 +1,3540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Life Simulator - GPU Optimized</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .main-content {
+            flex: 1;
+        }
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px auto;
+        }
+        canvas {
+            border: 1px solid #333;
+            display: block;
+        }
+        #canvas {
+            position: relative;
+            z-index: 2;
+            background: #000;
+        }
+        .control-panel {
+            width: 350px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #fff;
+            font-size: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+        .slider-row {
+            margin-bottom: 10px;
+        }
+        .slider-row label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        .checkbox-label {
+            display: flex !important;
+            align-items: center;
+        }
+        .slider-row label input[type="checkbox"] {
+            margin-right: 8px;
+            transform: scale(1.2);
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+            border: none;
+        }
+        .value-display {
+            min-width: 50px;
+            text-align: right;
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+        }
+        .species-a { color: #ff4444; }
+        .species-b { color: #4444ff; }
+        
+        /* Particle Settings Styles */
+        .particle-settings {
+            margin-bottom: 15px;
+        }
+        .species-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .species-label {
+            min-width: 70px;
+            font-weight: bold;
+        }
+        .param-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .param-label {
+            color: #ccc;
+            font-size: 12px;
+        }
+        .draggable-number {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: ns-resize;
+            user-select: none;
+            min-width: 40px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .draggable-number:hover {
+            background: #444;
+            border-color: #666;
+        }
+        .draggable-number.dragging {
+            background: #555;
+            border-color: #888;
+        }
+        
+        /* Force Matrix Styles */
+        .matrix-container {
+            margin-top: 15px;
+        }
+        .matrix-grid {
+            display: grid;
+            gap: 0px;
+            background: #555;
+            border: 2px solid #666;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .matrix-header {
+            background: #222;
+            padding: 6px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            border: 2px solid #444;
+        }
+        .species-color-picker {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #666;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .matrix-cell {
+            background: #444;
+            padding: 0;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: ns-resize;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: background-color 0.1s ease;
+            border: 2px solid #333;
+        }
+        .matrix-cell:hover {
+            border: 2px solid #888;
+        }
+        .matrix-cell.dragging {
+            border: 2px solid #fff;
+        }
+        .force-legend {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 10px;
+            color: #888;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            background: #333;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #555;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 1024px) {
+            .control-panel {
+                width: 280px;
+                min-width: 280px;
+                padding: 12px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            .control-panel {
+                width: 100%;
+                min-width: auto;
+                height: auto;
+                max-height: 40vh;
+                order: -1;
+                border-left: none;
+                border-bottom: 1px solid #333;
+            }
+            .main-content {
+                min-height: 60vh;
+                height: 60vh;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .control-panel {
+                max-height: 45vh;
+                padding: 10px;
+            }
+            .main-content {
+                min-height: 55vh;
+                height: 55vh;
+            }
+        }
+        
+        /* Audio Control Styles */
+        .audio-master-controls {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            border-radius: 6px;
+        }
+        
+        .audio-button {
+            background: #444;
+            color: #fff;
+            border: none;
+            padding: 4px 8px;
+            margin-left: 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+            min-width: 35px;
+        }
+        
+        .audio-button:hover {
+            background: #666;
+        }
+        
+        .audio-button.active {
+            background: #4CAF50;
+        }
+        
+        .loop-controls {
+            display: flex;
+            gap: 4px;
+            flex: 1;
+        }
+        
+        .loop-button {
+            min-width: 32px;
+            height: 24px;
+            padding: 2px 6px;
+            font-size: 12px;
+            background: #444;
+            color: #fff;
+            border: 1px solid #666;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loop-button:hover {
+            background: #555;
+            border-color: #777;
+        }
+        
+        .loop-button.active {
+            background: #4CAF50;
+            color: #000;
+            border-color: #4CAF50;
+        }
+        
+        .freq-range-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .freq-range {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .freq-label {
+            min-width: 35px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .freq-slider {
+            flex: 1;
+        }
+        
+        .audio-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        
+        .species-audio-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .species-audio-panel {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 6px;
+        }
+        
+        .species-audio-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .species-audio-title {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .audio-file-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-input-label {
+            background: #333;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            border: 1px solid #555;
+        }
+        
+        .file-input-label:hover {
+            background: #444;
+        }
+        
+        .file-name {
+            flex: 1;
+            font-size: 11px;
+            color: #888;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .waveform-container {
+            width: 100%;
+            height: 40px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 3px;
+            margin-bottom: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .audio-controls-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        
+        .grain-activity {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+        
+        .grain-indicator {
+            width: 8px;
+            height: 8px;
+            background: #333;
+            border-radius: 50%;
+            transition: background-color 0.1s ease;
+        }
+        
+        .grain-indicator.active {
+            background: #4CAF50;
+        }
+        
+        .audio-meter {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+        }
+        
+        .meter-bar {
+            width: 50px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .meter-fill {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50, #FFC107, #FF5722);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        /* Trail visualization in UI - REMOVED */
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <h3>Simulation Control</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button onclick="resetSimulation()" style="flex: 1;">Reset Simulation</button>
+                <button onclick="togglePause()" style="flex: 1;">Pause/Resume</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Performance</h3>
+            <div style="font-size: 12px; color: #888; line-height: 1.4;">
+                <div>FPS: <span id="fps-display" style="color: #4CAF50;">60</span></div>
+                <div>Canvas: <span id="canvas-size" style="color: #4CAF50;">1200×800</span></div>
+                <div>Spatial Grid: <span id="grid-info" style="color: #4CAF50;">Active</span></div>
+                <div>GPU Trails: <span style="color: #4CAF50;">Species-Specific</span></div>
+                <div>Particles: <span id="total-particles">400</span></div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Particle Settings</h3>
+            <div class="slider-row">
+                <label>Species Count</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="speciesCount" min="2" max="8" step="1" value="2">
+                    <span class="value-display" id="speciesCount-value">2</span>
+                </div>
+            </div>
+            <div class="particle-settings" id="particleSettings">
+                <!-- Species rows will be generated dynamically -->
+            </div>
+            
+            <div class="matrix-container">
+                <h4 style="margin: 15px 0 10px 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
+                <div class="matrix-grid" id="forceMatrix">
+                    <!-- Matrix will be generated dynamically -->
+                </div>
+                <div class="force-legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ff4444;"></div>
+                        <span>Repulsion (-1.0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #666;"></div>
+                        <span>Neutral (0.0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #44ff44;"></div>
+                        <span>Attraction (+1.0)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Physics Settings</h3>
+            <div class="slider-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="toroidalSpace" checked style="margin-right: 8px;">
+                    Toroidal Space (Edge Wrapping)
+                </label>
+            </div>
+            <div class="slider-row">
+                <label>Friction</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="friction" min="0.85" max="1.0" step="0.01" value="0.95">
+                    <span class="value-display" id="friction-value">0.95</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Force Radius</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="forceRadius" min="20" max="200" step="10" value="60">
+                    <span class="value-display" id="forceRadius-value">60</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Simulation Speed</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="simSpeed" min="0.1" max="2.0" step="0.1" value="1.0">
+                    <span class="value-display" id="simSpeed-value">1.0</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Gravity Strength</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="gravityStrength" min="0.0" max="2.0" step="0.1" value="0.0">
+                    <span class="value-display" id="gravityStrength-value">0.0</span>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-top: 8px;">
+                Click and hold on simulation to create gravity pull
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Audio System</h3>
+            <div class="audio-master-controls">
+                <div class="slider-row">
+                    <label>Master Volume</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="masterVolume" min="0" max="1.0" step="0.05" value="0.3">
+                        <span class="value-display" id="masterVolume-value">0.30</span>
+                        <button id="masterMute" class="audio-button">🔇</button>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <label>Frequency Range</label>
+                    <div class="freq-range-container">
+                        <div class="freq-range">
+                            <span class="freq-label">Low:</span>
+                            <input type="range" class="slider freq-slider" id="freqLow" min="20" max="500" step="10" value="80">
+                            <span class="value-display" id="freqLow-value">80Hz</span>
+                        </div>
+                        <div class="freq-range">
+                            <span class="freq-label">High:</span>
+                            <input type="range" class="slider freq-slider" id="freqHigh" min="1000" max="20000" step="100" value="8000">
+                            <span class="value-display" id="freqHigh-value">8000Hz</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="audio-status">
+                    <span>Audio: </span><span id="audioStatus" style="color: #888;">Initializing...</span>
+                    <button id="audioInit" class="audio-button">🎵 Start Audio</button>
+                </div>
+            </div>
+            
+            <div class="species-audio-container" id="speciesAudioControls">
+                <!-- Species audio controls will be generated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebGL setup and particle system
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        
+        if (!gl) {
+            alert('WebGL not supported!');
+        }
+
+        // Canvas resizing system
+        let canvasWidth = 1200;
+        let canvasHeight = 800;
+
+        function resizeCanvas() {
+            const mainContent = document.querySelector('.main-content');
+            const containerRect = mainContent.getBoundingClientRect();
+            
+            // Use the full main-content area
+            const newWidth = containerRect.width;
+            const newHeight = containerRect.height;
+            
+            // Only resize if dimensions actually changed
+            if (newWidth !== canvasWidth || newHeight !== canvasHeight) {
+                const oldWidth = canvasWidth;
+                const oldHeight = canvasHeight;
+                
+                canvasWidth = newWidth;
+                canvasHeight = newHeight;
+                
+                // Update canvas size
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                
+                // Update WebGL viewport
+                gl.viewport(0, 0, canvasWidth, canvasHeight);
+                
+                // Scale particle positions proportionally
+                if (particles.length > 0 && oldWidth > 0 && oldHeight > 0) {
+                    const scaleX = canvasWidth / oldWidth;
+                    const scaleY = canvasHeight / oldHeight;
+                    
+                    for (let particle of particles) {
+                        particle.x *= scaleX;
+                        particle.y *= scaleY;
+                        
+                        // Clear trail buffer to avoid visual artifacts
+                        particle.trailBuffer.clear();
+                    }
+                }
+                
+                // Update spatial grid for new dimensions
+                if (spatialGrid) {
+                    spatialGrid.canvasWidth = canvasWidth;
+                    spatialGrid.canvasHeight = canvasHeight;
+                    spatialGrid.gridWidth = Math.ceil(canvasWidth / spatialGrid.cellSize);
+                    spatialGrid.gridHeight = Math.ceil(canvasHeight / spatialGrid.cellSize);
+                    
+                    // Recreate grid with new dimensions
+                    const newSize = spatialGrid.gridWidth * spatialGrid.gridHeight;
+                    spatialGrid.grid = [];
+                    for (let i = 0; i < newSize; i++) {
+                        spatialGrid.grid[i] = [];
+                    }
+                }
+                
+                // Reinitialize trail system for new canvas size
+                if (trailFramebuffer) {
+                    // Delete old framebuffer and texture
+                    gl.deleteFramebuffer(trailFramebuffer);
+                    gl.deleteTexture(trailTexture);
+                    
+                    // Reinitialize trail system
+                    initTrailSystem();
+                }
+                
+                // Update gravity point if active (scale it proportionally)
+                if (gravityPoint.active && oldWidth > 0 && oldHeight > 0) {
+                    gravityPoint.x *= (canvasWidth / oldWidth);
+                    gravityPoint.y *= (canvasHeight / oldHeight);
+                }
+                
+                console.log(`🖥️ Canvas resized to ${canvasWidth}×${canvasHeight}`);
+            }
+        }
+
+        // Setup resize handling
+        function setupResizeHandling() {
+            // Initial resize with delay to ensure DOM is ready
+            setTimeout(() => {
+                resizeCanvas();
+            }, 100);
+            
+            // Handle window resize
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(resizeCanvas, 100); // Debounce resize
+            });
+            
+            // Also check on orientation change (mobile)
+            window.addEventListener('orientationchange', () => {
+                setTimeout(resizeCanvas, 300); // Delay for orientation change
+            });
+            
+            // Force resize after a longer delay to catch any layout issues
+            setTimeout(resizeCanvas, 500);
+        }
+
+        // Particle data
+        let particles = [];
+        let isPaused = false;
+        let spatialGrid; // Spatial partitioning system
+
+        // GPU-based trail system setup
+        let trailFramebuffer;
+        let trailTexture;
+        let trailProgram;
+        let fadeProgram;
+        let trailPositionBuffer;
+        let trailColorBuffer;
+        let trailSizeBuffer; // Add size buffer for trail thickness
+        let quadBuffer;
+        
+        // Trail shader sources for GPU-based rendering
+        const trailVertexShaderSource = `
+            attribute vec2 a_position;
+            attribute vec3 a_color;
+            attribute float a_alpha;
+            attribute float a_size;
+            uniform vec2 u_resolution;
+            varying vec3 v_color;
+            varying float v_alpha;
+            
+            void main() {
+                vec2 position = ((a_position / u_resolution) * 2.0 - 1.0) * vec2(1, -1);
+                gl_Position = vec4(position, 0, 1);
+                gl_PointSize = a_size;
+                v_color = a_color;
+                v_alpha = a_alpha;
+            }
+        `;
+
+        const trailFragmentShaderSource = `
+            precision mediump float;
+            varying vec3 v_color;
+            varying float v_alpha;
+            
+            void main() {
+                float dist = distance(gl_PointCoord, vec2(0.5));
+                if (dist > 0.5) discard;
+                
+                // Enhanced soft circular gradient for vibrant trails
+                float alpha = v_alpha * (1.0 - smoothstep(0.0, 0.5, dist));
+                
+                // Boost color saturation and brightness for more noticeable trails
+                vec3 enhancedColor = v_color * 1.3; // Brightness boost
+                enhancedColor = mix(vec3(dot(enhancedColor, vec3(0.299, 0.587, 0.114))), enhancedColor, 1.4); // Saturation boost
+                enhancedColor = clamp(enhancedColor, 0.0, 1.0);
+                
+                gl_FragColor = vec4(enhancedColor, alpha);
+            }
+        `;
+        
+        // Fade shader for species-adaptive decay
+        const fadeVertexShaderSource = `
+            attribute vec2 a_position;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                gl_Position = vec4(a_position, 0, 1);
+                v_texCoord = (a_position + 1.0) * 0.5;
+            }
+        `;
+
+        const fadeFragmentShaderSource = `
+            precision mediump float;
+            uniform sampler2D u_texture;
+            uniform float u_fadeAmount;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                vec4 color = texture2D(u_texture, v_texCoord);
+                // Enhanced fade with better preservation of bright spots
+                float brightness = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                float fadeBoost = mix(1.0, 1.2, brightness);
+                gl_FragColor = vec4(color.rgb, color.a * u_fadeAmount * fadeBoost);
+            }
+        `;
+
+        // Species management
+        let speciesCount = 2;
+        let maxSpecies = 8;
+        let speciesColors = [
+            [1.0, 0.27, 0.27], // Red
+            [0.27, 0.27, 1.0], // Blue
+            [0.27, 1.0, 0.27], // Green
+            [1.0, 1.0, 0.27],  // Yellow
+            [1.0, 0.27, 1.0],  // Magenta
+            [0.27, 1.0, 1.0],  // Cyan
+            [1.0, 0.5, 0.0],   // Orange
+            [0.5, 0.0, 1.0]    // Purple
+        ];
+
+        // Configurable parameters
+        let particleSizes = [4, 4, 4, 4, 4, 4, 4, 4];
+        let particleCounts = [200, 200, 100, 100, 100, 100, 100, 100];
+        let speciesTrailLengths = [0.6, 0.4, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]; // Individual trail fade per species (0.0-1.0)
+        let FRICTION = 0.95;
+        let MAX_FORCE_DISTANCE = 60;
+        let SIMULATION_SPEED = 1.0;
+        let TOROIDAL_SPACE = true; // Toggle for edge wrapping
+        let GRAVITY_STRENGTH = 0.0; // Gravity pull strength
+        
+        // Gravity system
+        let gravityPoint = { x: 0, y: 0, active: false };
+        let isMouseDown = false;
+
+        // Species constants
+        const SPECIES = {
+            A: 0, // Red
+            B: 1  // Blue
+        };
+
+        // Relationship matrix (force strengths) - now dynamic and expandable
+        let RELATIONSHIP_MATRIX = [
+            [-0.3, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],   // A relationships
+            [-0.5, -0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  // B relationships
+            [0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, 0.0],   // C relationships
+            [0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0],   // D relationships
+            [0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0],   // E relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0],   // F relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0],   // G relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1]    // H relationships
+        ];
+
+        // Force parameters
+        const MAX_SPEED = 3;
+
+        // WebGL shader sources
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            attribute float a_size;
+            attribute vec3 a_color;
+            uniform vec2 u_resolution;
+            varying vec3 v_color;
+            
+            void main() {
+                vec2 position = ((a_position / u_resolution) * 2.0 - 1.0) * vec2(1, -1);
+                gl_Position = vec4(position, 0, 1);
+                gl_PointSize = a_size;
+                v_color = a_color;
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying vec3 v_color;
+            
+            void main() {
+                float dist = distance(gl_PointCoord, vec2(0.5));
+                if (dist > 0.5) discard;
+                gl_FragColor = vec4(v_color, 1.0);
+            }
+        `;
+
+        // Create and compile shader
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            
+            return shader;
+        }
+
+        // Create shader program
+        function createProgram(gl, vertexShader, fragmentShader) {
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Program link error:', gl.getProgramInfoLog(program));
+                gl.deleteProgram(program);
+                return null;
+            }
+            
+            return program;
+        }
+
+        // Initialize WebGL
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+        const program = createProgram(gl, vertexShader, fragmentShader);
+
+        // Get attribute and uniform locations
+        const positionAttributeLocation = gl.getAttribLocation(program, 'a_position');
+        const sizeAttributeLocation = gl.getAttribLocation(program, 'a_size');
+        const colorAttributeLocation = gl.getAttribLocation(program, 'a_color');
+        const resolutionUniformLocation = gl.getUniformLocation(program, 'u_resolution');
+
+        // Create buffers
+        const positionBuffer = gl.createBuffer();
+        const sizeBuffer = gl.createBuffer();
+        const colorBuffer = gl.createBuffer();
+
+        // Audio System Setup
+        let audioContext = null;
+        let masterGainNode = null;
+        let compressorNode = null;
+        let isAudioEnabled = false;
+        let isMasterMuted = false;
+        let masterVolume = 0.3;
+        let frequencyRange = { low: 80, high: 8000 };
+        
+        // Species audio synthesizers
+        let speciesAudioSynths = [];
+        
+        // Removed default samples feature
+
+        // Granular Synthesizer Class
+        class GranularSynth {
+            constructor(speciesIndex, audioContext, masterGain) {
+                this.speciesIndex = speciesIndex;
+                this.audioContext = audioContext;
+                this.masterGain = masterGain;
+                
+                // Audio graph
+                this.gainNode = audioContext.createGain();
+                this.gainNode.connect(masterGain);
+                this.gainNode.gain.value = 0.7;
+                
+                // Sample buffer and selection
+                this.audioBuffer = null;
+                this.fileName = '';
+                this.sampleStart = 0.0; // Start position in sample (0-1)
+                this.sampleEnd = 1.0;   // End position in sample (0-1)
+                
+                // Grain management
+                this.grains = [];
+                this.maxGrains = 50;
+                this.grainDuration = 0.1; // Default 100ms
+                
+                // Grain loop mode: 'forward', 'reverse', 'alternate'
+                this.loopMode = 'forward';
+                this.alternateDirection = 1; // 1 for forward, -1 for reverse
+                
+                // Audio parameters
+                this.pitch = 0; // Semitones (0-24)
+                this.detune = 0; // Cents (0-50, randomized per grain)
+                this.gainCurve = 1.0; // Exponential curve for velocity->gain (0.1-3.0)
+                this.fadeLength = 0.002; // Crossfade length (1ms-20ms)
+                
+                // State
+                this.isMuted = false;
+                this.volume = 0.7;
+                this.activeGrains = 0;
+                
+                // Performance tracking
+                this.lastUpdate = 0;
+                this.updateInterval = 16; // ~60fps
+                
+                console.log(`🎵 Granular synth created for Species ${String.fromCharCode(65 + speciesIndex)}`);
+            }
+            
+            // Load audio sample
+            async loadSample(arrayBuffer) {
+                try {
+                    this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    console.log(`🎵 Sample loaded for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
+                    return true;
+                } catch (error) {
+                    console.error('Audio decode error:', error);
+                    return false;
+                }
+            }
+            
+            // Removed setDefaultSample method - no longer needed
+            
+            // Create and manage audio grain with crossfading
+            createGrain(particle) {
+                if (!this.audioBuffer || this.isMuted || !isAudioEnabled) return null;
+                if (this.grains.length >= this.maxGrains) return null;
+                
+                const source = this.audioContext.createBufferSource();
+                const gainNode = this.audioContext.createGain();
+                const filterNode = this.audioContext.createBiquadFilter();
+                const pannerNode = this.audioContext.createStereoPanner();
+                
+                // Setup audio graph: source -> filter -> gain -> panner -> species gain
+                source.buffer = this.audioBuffer;
+                source.connect(filterNode);
+                filterNode.connect(gainNode);
+                gainNode.connect(pannerNode);
+                pannerNode.connect(this.gainNode);
+                
+                // Configure filter for Y-axis frequency control
+                filterNode.type = 'bandpass';
+                filterNode.Q.value = 2;
+                
+                // Calculate parameters from particle
+                const sampleRange = this.sampleEnd - this.sampleStart;
+                const samplePosition = this.sampleStart + (Math.max(0, Math.min(1, particle.x / canvasWidth)) * sampleRange);
+                const { frequency, bandwidth } = this.calculateFrequencyAndBandwidth(particle.y / canvasHeight, particle.size);
+                const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+                
+                // Apply gain curve to velocity influence
+                const normalizedVelocity = Math.min(1, velocity / MAX_SPEED);
+                const curvedVelocity = Math.pow(normalizedVelocity, this.gainCurve);
+                const volume = curvedVelocity * this.volume;
+                
+                const grainDuration = this.mapTrailLengthToGrainDuration(particle);
+                const pan = (particle.x / canvasWidth) * 2 - 1; // -1 (left) to +1 (right)
+                
+                // Calculate pitch adjustment (semitones + random detune)
+                const semitoneRatio = Math.pow(2, this.pitch / 12); // Convert semitones to frequency ratio
+                const randomDetuneCents = (Math.random() - 0.5) * 2 * this.detune; // Random detune in cents
+                const detuneRatio = Math.pow(2, randomDetuneCents / 1200); // Convert cents to frequency ratio
+                const totalPitchRatio = semitoneRatio * detuneRatio;
+                
+                // Enhanced crossfading parameters using fadeLength setting
+                const crossfadeTime = this.fadeLength; // Use species-specific fade length
+                const fadeInTime = Math.min(crossfadeTime, grainDuration * 0.1); // Max 10% of grain duration
+                const fadeOutTime = Math.min(crossfadeTime, grainDuration * 0.1);
+                
+                // Calculate sample start/end positions based on loop mode with crossfading
+                let startTime, endTime, playbackRate = 1;
+                
+                if (this.loopMode === 'forward') {
+                    startTime = samplePosition * this.audioBuffer.duration;
+                    endTime = Math.min(startTime + grainDuration, this.audioBuffer.duration);
+                } else if (this.loopMode === 'reverse') {
+                    // Play backwards by setting negative playback rate
+                    startTime = samplePosition * this.audioBuffer.duration;
+                    endTime = Math.max(startTime - grainDuration, 0);
+                    playbackRate = -1;
+                    // For reverse playback, we need to start from the end position
+                    const temp = startTime;
+                    startTime = endTime;
+                    endTime = temp;
+                } else if (this.loopMode === 'alternate') {
+                    // Alternate between forward and reverse for each grain with crossfade
+                    if (this.alternateDirection === 1) {
+                        // Forward
+                        startTime = samplePosition * this.audioBuffer.duration;
+                        endTime = Math.min(startTime + grainDuration, this.audioBuffer.duration);
+                        playbackRate = 1;
+                    } else {
+                        // Reverse
+                        startTime = samplePosition * this.audioBuffer.duration;
+                        endTime = Math.max(startTime - grainDuration, 0);
+                        playbackRate = -1;
+                        const temp = startTime;
+                        startTime = endTime;
+                        endTime = temp;
+                    }
+                    // Toggle direction for next grain
+                    this.alternateDirection *= -1;
+                }
+                
+                // Set playback rate for direction and pitch
+                source.playbackRate.value = Math.abs(playbackRate) * totalPitchRatio;
+                
+                // Enhanced gain envelope with smooth crossfading
+                const now = this.audioContext.currentTime;
+                const sustainTime = grainDuration - fadeInTime - fadeOutTime;
+                
+                // Start with zero gain
+                gainNode.gain.setValueAtTime(0, now);
+                
+                // Fade in (prevents clicks)
+                gainNode.gain.linearRampToValueAtTime(volume, now + fadeInTime);
+                
+                // Sustain level
+                if (sustainTime > 0) {
+                    gainNode.gain.setValueAtTime(volume, now + fadeInTime + sustainTime);
+                }
+                
+                // Fade out (prevents clicks)
+                gainNode.gain.linearRampToValueAtTime(0, now + grainDuration);
+                
+                // Set frequency and bandwidth (Y-axis mapping + particle size)
+                filterNode.frequency.setValueAtTime(frequency, now);
+                filterNode.Q.setValueAtTime(bandwidth, now);
+                
+                // Set panning (X-axis mapping)
+                pannerNode.pan.setValueAtTime(pan, now);
+                
+                // Create grain object
+                const grain = {
+                    source,
+                    gainNode,
+                    filterNode,
+                    pannerNode,
+                    startTime: now,
+                    duration: grainDuration,
+                    particle: particle,
+                    isPlaying: true,
+                    playbackRate: playbackRate,
+                    fadeInTime: fadeInTime,
+                    fadeOutTime: fadeOutTime
+                };
+                
+                // Start playback with proper timing
+                const actualDuration = Math.abs(endTime - startTime);
+                if (actualDuration > 0) {
+                    source.start(now, startTime, actualDuration);
+                    source.stop(now + grainDuration);
+                } else {
+                    // Handle edge case where duration is zero
+                    return null;
+                }
+                
+                // Cleanup when finished
+                source.onended = () => {
+                    this.removeGrain(grain);
+                };
+                
+                this.grains.push(grain);
+                return grain;
+            }
+            
+            // Remove grain from pool
+            removeGrain(grain) {
+                const index = this.grains.indexOf(grain);
+                if (index !== -1) {
+                    this.grains.splice(index, 1);
+                    grain.isPlaying = false;
+                }
+            }
+            
+            // Update grain parameters based on particle movement
+            updateGrain(grain, particle) {
+                if (!grain.isPlaying) return;
+                
+                const now = this.audioContext.currentTime;
+                const { frequency, bandwidth } = this.calculateFrequencyAndBandwidth(particle.y / canvas.height, particle.size);
+                const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+                const volume = Math.min(1, velocity / MAX_SPEED) * this.volume;
+                const pan = (particle.x / canvas.width) * 2 - 1; // -1 (left) to +1 (right)
+                
+                // Update frequency and bandwidth smoothly
+                grain.filterNode.frequency.setTargetAtTime(frequency, now, 0.01);
+                grain.filterNode.Q.setTargetAtTime(bandwidth, now, 0.01);
+                
+                // Update volume based on velocity
+                grain.gainNode.gain.setTargetAtTime(volume, now, 0.01);
+                
+                // Update panning based on X position
+                grain.pannerNode.pan.setTargetAtTime(pan, now, 0.01);
+            }
+            
+            // Calculate frequency and bandwidth from Y position and particle size (narrower bands for smaller particles)
+            calculateFrequencyAndBandwidth(normalizedY, particleSize) {
+                // Invert Y (top = high frequency, bottom = low frequency)
+                const invY = 1 - normalizedY;
+                
+                // Logarithmic scaling for musical frequency perception
+                const logLow = Math.log(frequencyRange.low);
+                const logHigh = Math.log(frequencyRange.high);
+                const logFreq = logLow + (invY * (logHigh - logLow));
+                const frequency = Math.exp(logFreq);
+                
+                // Map particle size to filter bandwidth - REVERSED: smaller particles = narrower bands
+                const minSize = 2; // Minimum particle size
+                const maxSize = 10; // Maximum particle size
+                const normalizedSize = Math.max(0, Math.min(1, (particleSize - minSize) / (maxSize - minSize)));
+                
+                // Smaller particles = higher Q (narrower band), larger particles = lower Q (wider band)
+                // Adjusted for narrower base frequency at size 2.0
+                const minQ = 1.0; // Wide bandwidth for large particles
+                const maxQ = 12.0; // Very narrow bandwidth for small particles (size 2.0)
+                const bandwidth = maxQ - (normalizedSize * (maxQ - minQ));
+                
+                return { frequency, bandwidth };
+            }
+            
+            // Map trail length to grain duration - direct mapping to 2ms-200ms range
+            mapTrailLengthToGrainDuration(particle) {
+                const speciesTrailLength = speciesTrailLengths[particle.species] || 0.5;
+                
+                const minDuration = 0.002; // 2ms
+                const maxDuration = 0.2;   // 200ms
+                
+                // Direct linear mapping of species trail length (0-1) to grain duration (2ms-200ms)
+                return minDuration + (speciesTrailLength * (maxDuration - minDuration));
+            }
+            
+            // Update all grains for this species
+            update(particles) {
+                const now = performance.now();
+                if (now - this.lastUpdate < this.updateInterval) return;
+                
+                this.lastUpdate = now;
+                this.activeGrains = this.grains.length;
+                
+                // Update existing grains with their particles
+                for (let i = this.grains.length - 1; i >= 0; i--) {
+                    const grain = this.grains[i];
+                    if (grain.particle && grain.isPlaying) {
+                        this.updateGrain(grain, grain.particle);
+                    }
+                }
+                
+                // Create new grains for particles that don't have them
+                const speciesParticles = particles.filter(p => p.species === this.speciesIndex);
+                const particlesWithGrains = new Set(this.grains.map(g => g.particle));
+                
+                for (let particle of speciesParticles) {
+                    if (!particlesWithGrains.has(particle) && this.grains.length < this.maxGrains) {
+                        this.createGrain(particle);
+                    }
+                }
+            }
+            
+            // Set volume
+            setVolume(volume) {
+                this.volume = Math.max(0, Math.min(1, volume));
+                this.gainNode.gain.setTargetAtTime(this.isMuted ? 0 : this.volume, this.audioContext.currentTime, 0.01);
+            }
+            
+            // Mute/unmute
+            setMute(muted) {
+                this.isMuted = muted;
+                this.gainNode.gain.setTargetAtTime(muted ? 0 : this.volume, this.audioContext.currentTime, 0.01);
+            }
+            
+            // Set loop mode
+            setLoopMode(mode) {
+                this.loopMode = mode;
+                this.alternateDirection = 1; // Reset alternate direction
+                console.log(`🎵 Species ${String.fromCharCode(65 + this.speciesIndex)} loop mode: ${mode}`);
+            }
+            
+            // Stop all grains
+            stopAll() {
+                for (let grain of this.grains) {
+                    if (grain.source && grain.isPlaying) {
+                        grain.source.stop();
+                    }
+                }
+                this.grains = [];
+            }
+        }
+
+        // Initialize Audio System
+        async function initAudioSystem() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create master audio graph
+                masterGainNode = audioContext.createGain();
+                compressorNode = audioContext.createDynamicsCompressor();
+                
+                // Setup audio chain: species synths -> master gain -> compressor -> destination
+                masterGainNode.connect(compressorNode);
+                compressorNode.connect(audioContext.destination);
+                
+                // Configure compressor for safety
+                compressorNode.threshold.value = -20;
+                compressorNode.knee.value = 10;
+                compressorNode.ratio.value = 8;
+                compressorNode.attack.value = 0.001;
+                compressorNode.release.value = 0.1;
+                
+                // Set master volume
+                masterGainNode.gain.value = masterVolume;
+                
+                // Initialize species synthesizers (no default samples)
+                initSpeciesSynths();
+                
+                isAudioEnabled = true;
+                updateAudioStatus('Ready');
+                
+                console.log('🎵 Audio system initialized successfully');
+                return true;
+                
+            } catch (error) {
+                console.error('Audio initialization failed:', error);
+                updateAudioStatus('Failed');
+                return false;
+            }
+        }
+        
+        // Removed generateDefaultSamples function - no longer needed
+        
+        // Initialize species synthesizers (preserves existing audio buffers)
+        function initSpeciesSynths() {
+            const existingData = [];
+            
+            // Preserve existing audio data
+            for (let i = 0; i < speciesAudioSynths.length; i++) {
+                if (speciesAudioSynths[i]) {
+                    existingData[i] = {
+                        audioBuffer: speciesAudioSynths[i].audioBuffer,
+                        fileName: speciesAudioSynths[i].fileName,
+                        volume: speciesAudioSynths[i].volume,
+                        isMuted: speciesAudioSynths[i].isMuted,
+                        loopMode: speciesAudioSynths[i].loopMode,
+                        sampleStart: speciesAudioSynths[i].sampleStart || 0.0,
+                        sampleEnd: speciesAudioSynths[i].sampleEnd || 1.0,
+                        pitch: speciesAudioSynths[i].pitch || 0,
+                        detune: speciesAudioSynths[i].detune || 0,
+                        gainCurve: speciesAudioSynths[i].gainCurve || 1.0,
+                        fadeLength: speciesAudioSynths[i].fadeLength || 0.002
+                    };
+                }
+            }
+            
+            speciesAudioSynths = [];
+            
+            for (let i = 0; i < maxSpecies; i++) {
+                const synth = new GranularSynth(i, audioContext, masterGainNode);
+                
+                // Restore existing data if available
+                if (existingData[i]) {
+                    synth.audioBuffer = existingData[i].audioBuffer;
+                    synth.fileName = existingData[i].fileName || 'No Sample';
+                    synth.volume = existingData[i].volume;
+                    synth.isMuted = existingData[i].isMuted;
+                    synth.loopMode = existingData[i].loopMode;
+                    synth.sampleStart = existingData[i].sampleStart || 0.0;
+                    synth.sampleEnd = existingData[i].sampleEnd || 1.0;
+                    synth.pitch = existingData[i].pitch || 0;
+                    synth.detune = existingData[i].detune || 0;
+                    synth.gainCurve = existingData[i].gainCurve || 1.0;
+                    synth.fadeLength = existingData[i].fadeLength || 0.002;
+                    synth.alternateDirection = 1; // Reset alternate direction
+                }
+                
+                speciesAudioSynths.push(synth);
+            }
+            
+            // Generate species audio UI
+            createSpeciesAudioControls();
+        }
+        
+        // Update audio system with particle data
+        function updateAudioSystem() {
+            if (!isAudioEnabled || !audioContext || audioContext.state !== 'running') return;
+            
+            // Update each species synth with its particles
+            for (let i = 0; i < speciesCount; i++) {
+                if (speciesAudioSynths[i]) {
+                    speciesAudioSynths[i].update(particles);
+                }
+            }
+            
+            // Update UI indicators
+            updateAudioUI();
+        }
+        
+        // Update audio status display
+        function updateAudioStatus(status) {
+            const statusElement = document.getElementById('audioStatus');
+            if (statusElement) {
+                statusElement.textContent = status;
+                statusElement.style.color = status === 'Ready' ? '#4CAF50' : 
+                                          status === 'Failed' ? '#ff4444' : '#888';
+            }
+        }
+
+        // Audio control functions - defined globally for event handlers
+        function toggleSpeciesMute(speciesIndex) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            const synth = speciesAudioSynths[speciesIndex];
+            synth.setMute(!synth.isMuted);
+            
+            const button = document.getElementById(`speciesMute${speciesIndex}`);
+            if (button) {
+                button.textContent = synth.isMuted ? '🔇' : '🔊';
+                button.classList.toggle('active', !synth.isMuted);
+            }
+        }
+        
+        function setSpeciesVolume(speciesIndex, volume) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            speciesAudioSynths[speciesIndex].setVolume(volume);
+            
+            const valueDisplay = document.getElementById(`speciesVolume${speciesIndex}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = volume.toFixed(2);
+            }
+        }
+        
+        function setMasterVolume(volume) {
+            masterVolume = volume;
+            if (masterGainNode) {
+                masterGainNode.gain.setTargetAtTime(isMasterMuted ? 0 : volume, audioContext.currentTime, 0.01);
+            }
+            
+            const valueDisplay = document.getElementById('masterVolume-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = volume.toFixed(2);
+            }
+        }
+        
+        function toggleMasterMute() {
+            isMasterMuted = !isMasterMuted;
+            if (masterGainNode) {
+                masterGainNode.gain.setTargetAtTime(isMasterMuted ? 0 : masterVolume, audioContext.currentTime, 0.01);
+            }
+            
+            const button = document.getElementById('masterMute');
+            if (button) {
+                button.textContent = isMasterMuted ? '🔇' : '🔊';
+                button.classList.toggle('active', !isMasterMuted);
+            }
+        }
+        
+        function setFrequencyRange(low, high) {
+            frequencyRange.low = low;
+            frequencyRange.high = high;
+            
+            const lowDisplay = document.getElementById('freqLow-value');
+            const highDisplay = document.getElementById('freqHigh-value');
+            if (lowDisplay) lowDisplay.textContent = `${low}Hz`;
+            if (highDisplay) highDisplay.textContent = `${high}Hz`;
+        }
+
+        // New audio control functions
+        function setSpeciesPitch(speciesIndex, pitch) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            speciesAudioSynths[speciesIndex].pitch = pitch;
+            
+            const valueDisplay = document.getElementById(`speciesPitch${speciesIndex}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${pitch}st`;
+            }
+        }
+        
+        function setSpeciesDetune(speciesIndex, detune) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            speciesAudioSynths[speciesIndex].detune = detune;
+            
+            const valueDisplay = document.getElementById(`speciesDetune${speciesIndex}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${detune}¢`;
+            }
+        }
+        
+        function setSpeciesGainCurve(speciesIndex, curve) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            speciesAudioSynths[speciesIndex].gainCurve = curve;
+            
+            const valueDisplay = document.getElementById(`speciesGainCurve${speciesIndex}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = curve.toFixed(1);
+            }
+        }
+        
+        function setSpeciesFadeLength(speciesIndex, fadeLength) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            speciesAudioSynths[speciesIndex].fadeLength = fadeLength;
+            
+            const valueDisplay = document.getElementById(`speciesFade${speciesIndex}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${Math.round(fadeLength * 1000)}ms`;
+            }
+        }
+
+        // Set species loop mode - defined globally for loop button handlers
+        function setSpeciesLoopMode(speciesIndex, mode) {
+            if (!speciesAudioSynths[speciesIndex]) return;
+            
+            // Update the synth's loop mode
+            speciesAudioSynths[speciesIndex].setLoopMode(mode);
+            
+            // Update UI to show selected mode
+            const buttons = document.querySelectorAll(`[data-species="${speciesIndex}"][data-loop-mode]`);
+            buttons.forEach(button => {
+                button.classList.remove('active');
+                if (button.dataset.loopMode === mode) {
+                    button.classList.add('active');
+                }
+            });
+            
+            console.log(`🎵 Species ${String.fromCharCode(65 + speciesIndex)} loop mode set to: ${mode}`);
+        }
+
+        // Load audio file for species - defined globally for file input handlers
+        async function loadAudioFile(event, speciesIndex) {
+            const file = event.target.files[0];
+            if (!file || !speciesAudioSynths[speciesIndex]) return;
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const success = await speciesAudioSynths[speciesIndex].loadSample(arrayBuffer);
+                
+                if (success) {
+                    // Update UI
+                    const fileNameElement = document.getElementById(`fileName${speciesIndex}`);
+                    if (fileNameElement) {
+                        fileNameElement.textContent = file.name;
+                    }
+                    
+                    // Update waveform
+                    const waveformCanvas = document.getElementById(`waveform${speciesIndex}`);
+                    if (waveformCanvas) {
+                        drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, waveformCanvas, speciesColors[speciesIndex], speciesIndex);
+                    }
+                    
+                    console.log(`🎵 Loaded audio file for Species ${String.fromCharCode(65 + speciesIndex)}: ${file.name}`);
+                } else {
+                    alert('Failed to load audio file. Please try a different file.');
+                }
+            } catch (error) {
+                console.error('File loading error:', error);
+                alert('Error loading audio file.');
+            }
+        }
+
+        // Waveform selection state
+        let waveformSelection = {
+            isSelecting: false,
+            speciesIndex: -1,
+            startX: 0,
+            currentX: 0,
+            canvas: null
+        };
+
+        // Draw waveform visualization with selection overlay
+        function drawWaveform(audioBuffer, canvas, color, speciesIndex) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            if (!audioBuffer) return;
+            
+            const data = audioBuffer.getChannelData(0);
+            const step = Math.ceil(data.length / width);
+            const amp = height / 2;
+            
+            // Draw waveform
+            ctx.strokeStyle = `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            for (let i = 0; i < width; i++) {
+                let min = 1.0;
+                let max = -1.0;
+                
+                for (let j = 0; j < step; j++) {
+                    const datum = data[(i * step) + j];
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
+                
+                ctx.moveTo(i, (1 + min) * amp);
+                ctx.lineTo(i, (1 + max) * amp);
+            }
+            
+            ctx.stroke();
+            
+            // Draw center line
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, amp);
+            ctx.lineTo(width, amp);
+            ctx.stroke();
+            
+            // Draw selection overlay if this species has selection data
+            if (speciesAudioSynths[speciesIndex] && typeof speciesIndex !== 'undefined') {
+                const synth = speciesAudioSynths[speciesIndex];
+                if (synth.sampleStart !== 0 || synth.sampleEnd !== 1) {
+                    const startX = synth.sampleStart * width;
+                    const endX = synth.sampleEnd * width;
+                    const selectionWidth = endX - startX;
+                    
+                    // Draw selection rectangle
+                    ctx.fillStyle = `rgba(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)}, 0.3)`;
+                    ctx.fillRect(startX, 0, selectionWidth, height);
+                    
+                    // Draw selection borders
+                    ctx.strokeStyle = `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(startX, 0, selectionWidth, height);
+                }
+            }
+            
+            // Draw current selection if actively selecting on this canvas
+            if (waveformSelection.isSelecting && waveformSelection.canvas === canvas) {
+                const startX = Math.min(waveformSelection.startX, waveformSelection.currentX);
+                const endX = Math.max(waveformSelection.startX, waveformSelection.currentX);
+                const selectionWidth = endX - startX;
+                
+                // Draw active selection
+                ctx.fillStyle = `rgba(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)}, 0.4)`;
+                ctx.fillRect(startX, 0, selectionWidth, height);
+                
+                ctx.strokeStyle = `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(startX, 0, selectionWidth, height);
+                ctx.setLineDash([]); // Reset line dash
+            }
+        }
+
+        // Setup waveform selection handlers
+        function setupWaveformSelection(canvas, speciesIndex) {
+            canvas.addEventListener('mousedown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                
+                waveformSelection.isSelecting = true;
+                waveformSelection.speciesIndex = speciesIndex;
+                waveformSelection.startX = x;
+                waveformSelection.currentX = x;
+                waveformSelection.canvas = canvas;
+                
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (!waveformSelection.isSelecting || waveformSelection.canvas !== canvas) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                waveformSelection.currentX = Math.max(0, Math.min(canvas.width, x));
+                
+                // Redraw waveform with current selection
+                if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
+                    drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                }
+                
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseup', (e) => {
+                if (!waveformSelection.isSelecting || waveformSelection.canvas !== canvas) return;
+                
+                const startX = Math.min(waveformSelection.startX, waveformSelection.currentX);
+                const endX = Math.max(waveformSelection.startX, waveformSelection.currentX);
+                const width = canvas.width;
+                
+                // Convert pixels to normalized positions (0-1)
+                const startPos = Math.max(0, Math.min(1, startX / width));
+                const endPos = Math.max(0, Math.min(1, endX / width));
+                
+                // Only update if there's a meaningful selection (at least 2% of the waveform)
+                if (Math.abs(endPos - startPos) > 0.02) {
+                    const synth = speciesAudioSynths[speciesIndex];
+                    if (synth) {
+                        synth.sampleStart = startPos;
+                        synth.sampleEnd = endPos;
+                        console.log(`🎵 Species ${String.fromCharCode(65 + speciesIndex)} sample selection: ${(startPos * 100).toFixed(1)}% - ${(endPos * 100).toFixed(1)}%`);
+                    }
+                }
+                
+                // Reset selection state
+                waveformSelection.isSelecting = false;
+                waveformSelection.speciesIndex = -1;
+                waveformSelection.canvas = null;
+                
+                // Final redraw
+                if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
+                    drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                }
+                
+                e.preventDefault();
+            });
+            
+            // Handle mouse leaving the canvas
+            canvas.addEventListener('mouseleave', (e) => {
+                if (waveformSelection.isSelecting && waveformSelection.canvas === canvas) {
+                    // Cancel selection
+                    waveformSelection.isSelecting = false;
+                    waveformSelection.speciesIndex = -1;
+                    waveformSelection.canvas = null;
+                    
+                    // Redraw without selection
+                    if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
+                        drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                    }
+                }
+            });
+            
+            // Double-click to reset selection to full waveform
+            canvas.addEventListener('dblclick', (e) => {
+                const synth = speciesAudioSynths[speciesIndex];
+                if (synth) {
+                    synth.sampleStart = 0.0;
+                    synth.sampleEnd = 1.0;
+                    console.log(`🎵 Species ${String.fromCharCode(65 + speciesIndex)} sample selection reset to full waveform`);
+                    
+                    // Redraw waveform
+                    if (synth.audioBuffer) {
+                        drawWaveform(synth.audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                    }
+                }
+                e.preventDefault();
+            });
+            
+            // Make canvas cursor indicate it's selectable
+            canvas.style.cursor = 'crosshair';
+        }
+
+        // RGB to Hex conversion function - ensure it's defined before createSpeciesAudioControls
+        function rgbToHex(rgbArray) {
+            const r = Math.round(rgbArray[0] * 255);
+            const g = Math.round(rgbArray[1] * 255);
+            const b = Math.round(rgbArray[2] * 255);
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        // Create species audio controls UI - defined globally
+        function createSpeciesAudioControls() {
+            const container = document.getElementById('speciesAudioControls');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            for (let i = 0; i < speciesCount; i++) {
+                const synth = speciesAudioSynths[i];
+                const panel = document.createElement('div');
+                panel.className = 'species-audio-panel';
+                
+                const header = document.createElement('div');
+                header.className = 'species-audio-header';
+                
+                const title = document.createElement('div');
+                title.className = 'species-audio-title';
+                title.style.color = rgbToHex(speciesColors[i]);
+                title.textContent = `Species ${String.fromCharCode(65 + i)}`;
+                
+                const muteButton = document.createElement('button');
+                muteButton.className = 'audio-button';
+                muteButton.id = `speciesMute${i}`;
+                muteButton.textContent = (synth && synth.isMuted) ? '🔇' : '🔊';
+                if (synth && !synth.isMuted) muteButton.classList.add('active');
+                muteButton.addEventListener('click', () => toggleSpeciesMute(i));
+                
+                header.appendChild(title);
+                header.appendChild(muteButton);
+                
+                // File controls
+                const fileControls = document.createElement('div');
+                fileControls.className = 'audio-file-controls';
+                
+                const fileWrapper = document.createElement('div');
+                fileWrapper.className = 'file-input-wrapper';
+                
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.id = `audioFile${i}`;
+                fileInput.accept = '.wav,.mp3,.m4a,.ogg';
+                fileInput.addEventListener('change', (e) => loadAudioFile(e, i));
+                
+                const fileLabel = document.createElement('label');
+                fileLabel.className = 'file-input-label';
+                fileLabel.htmlFor = `audioFile${i}`;
+                fileLabel.textContent = '📁 Load Sample';
+                
+                const fileName = document.createElement('div');
+                fileName.className = 'file-name';
+                fileName.id = `fileName${i}`;
+                fileName.textContent = (synth && synth.fileName) || 'No Sample';
+                
+                fileWrapper.appendChild(fileInput);
+                fileWrapper.appendChild(fileLabel);
+                fileControls.appendChild(fileWrapper);
+                fileControls.appendChild(fileName);
+                
+                // Waveform display
+                const waveformContainer = document.createElement('div');
+                waveformContainer.className = 'waveform-container';
+                
+                const waveformCanvas = document.createElement('canvas');
+                waveformCanvas.className = 'waveform-canvas';
+                waveformCanvas.id = `waveform${i}`;
+                waveformCanvas.width = 280;
+                waveformCanvas.height = 40;
+                
+                waveformContainer.appendChild(waveformCanvas);
+                
+                // Setup waveform selection handlers
+                setupWaveformSelection(waveformCanvas, i);
+                
+                // Volume control
+                const volumeRow = document.createElement('div');
+                volumeRow.className = 'audio-controls-row';
+                
+                const volumeLabel = document.createElement('span');
+                volumeLabel.textContent = 'Volume:';
+                volumeLabel.style.minWidth = '50px';
+                volumeLabel.style.fontSize = '12px';
+                
+                const volumeSlider = document.createElement('input');
+                volumeSlider.type = 'range';
+                volumeSlider.className = 'slider';
+                volumeSlider.id = `speciesVolume${i}`;
+                volumeSlider.min = '0';
+                volumeSlider.max = '1';
+                volumeSlider.step = '0.05';
+                const currentVolume = (synth && typeof synth.volume !== 'undefined') ? synth.volume : 0.7;
+                volumeSlider.value = currentVolume.toString();
+                volumeSlider.style.flex = '1';
+                volumeSlider.addEventListener('input', (e) => setSpeciesVolume(i, parseFloat(e.target.value)));
+                
+                const volumeValue = document.createElement('span');
+                volumeValue.className = 'value-display';
+                volumeValue.id = `speciesVolume${i}-value`;
+                volumeValue.textContent = currentVolume.toFixed(2);
+                
+                volumeRow.appendChild(volumeLabel);
+                volumeRow.appendChild(volumeSlider);
+                volumeRow.appendChild(volumeValue);
+                
+                // Loop Mode Controls
+                const loopRow = document.createElement('div');
+                loopRow.className = 'audio-controls-row';
+                loopRow.style.marginBottom = '8px';
+                
+                const loopLabel = document.createElement('span');
+                loopLabel.textContent = 'Loop:';
+                loopLabel.style.minWidth = '50px';
+                loopLabel.style.fontSize = '12px';
+                loopLabel.style.color = '#ccc';
+                
+                const loopControls = document.createElement('div');
+                loopControls.className = 'loop-controls';
+                
+                // Forward button
+                const forwardBtn = document.createElement('button');
+                forwardBtn.className = 'loop-button';
+                if (!synth || synth.loopMode === 'forward') forwardBtn.classList.add('active');
+                forwardBtn.textContent = '▶';
+                forwardBtn.title = 'Forward Loop';
+                forwardBtn.dataset.species = i;
+                forwardBtn.dataset.loopMode = 'forward';
+                forwardBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'forward'));
+                
+                // Reverse button
+                const reverseBtn = document.createElement('button');
+                reverseBtn.className = 'loop-button';
+                if (synth && synth.loopMode === 'reverse') reverseBtn.classList.add('active');
+                reverseBtn.textContent = '◀';
+                reverseBtn.title = 'Reverse Loop';
+                reverseBtn.dataset.species = i;
+                reverseBtn.dataset.loopMode = 'reverse';
+                reverseBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'reverse'));
+                
+                // Alternate button
+                const alternateBtn = document.createElement('button');
+                alternateBtn.className = 'loop-button';
+                if (synth && synth.loopMode === 'alternate') alternateBtn.classList.add('active');
+                alternateBtn.textContent = '⇄';
+                alternateBtn.title = 'Alternate Loop';
+                alternateBtn.dataset.species = i;
+                alternateBtn.dataset.loopMode = 'alternate';
+                alternateBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'alternate'));
+                
+                loopControls.appendChild(forwardBtn);
+                loopControls.appendChild(reverseBtn);
+                loopControls.appendChild(alternateBtn);
+                
+                loopRow.appendChild(loopLabel);
+                loopRow.appendChild(loopControls);
+                
+                // Advanced Audio Controls
+                // Pitch control
+                const pitchRow = document.createElement('div');
+                pitchRow.className = 'audio-controls-row';
+                
+                const pitchLabel = document.createElement('span');
+                pitchLabel.textContent = 'Pitch:';
+                pitchLabel.style.minWidth = '50px';
+                pitchLabel.style.fontSize = '12px';
+                
+                const pitchSlider = document.createElement('input');
+                pitchSlider.type = 'range';
+                pitchSlider.className = 'slider';
+                pitchSlider.id = `speciesPitch${i}`;
+                pitchSlider.min = '0';
+                pitchSlider.max = '24';
+                pitchSlider.step = '1';
+                const currentPitch = (synth && typeof synth.pitch !== 'undefined') ? synth.pitch : 0;
+                pitchSlider.value = currentPitch.toString();
+                pitchSlider.style.flex = '1';
+                pitchSlider.addEventListener('input', (e) => setSpeciesPitch(i, parseInt(e.target.value)));
+                
+                const pitchValue = document.createElement('span');
+                pitchValue.className = 'value-display';
+                pitchValue.id = `speciesPitch${i}-value`;
+                pitchValue.textContent = `${currentPitch}st`;
+                
+                pitchRow.appendChild(pitchLabel);
+                pitchRow.appendChild(pitchSlider);
+                pitchRow.appendChild(pitchValue);
+                
+                // Detune control
+                const detuneRow = document.createElement('div');
+                detuneRow.className = 'audio-controls-row';
+                
+                const detuneLabel = document.createElement('span');
+                detuneLabel.textContent = 'Detune:';
+                detuneLabel.style.minWidth = '50px';
+                detuneLabel.style.fontSize = '12px';
+                
+                const detuneSlider = document.createElement('input');
+                detuneSlider.type = 'range';
+                detuneSlider.className = 'slider';
+                detuneSlider.id = `speciesDetune${i}`;
+                detuneSlider.min = '0';
+                detuneSlider.max = '50';
+                detuneSlider.step = '1';
+                const currentDetune = (synth && typeof synth.detune !== 'undefined') ? synth.detune : 0;
+                detuneSlider.value = currentDetune.toString();
+                detuneSlider.style.flex = '1';
+                detuneSlider.addEventListener('input', (e) => setSpeciesDetune(i, parseInt(e.target.value)));
+                
+                const detuneValue = document.createElement('span');
+                detuneValue.className = 'value-display';
+                detuneValue.id = `speciesDetune${i}-value`;
+                detuneValue.textContent = `${currentDetune}¢`;
+                
+                detuneRow.appendChild(detuneLabel);
+                detuneRow.appendChild(detuneSlider);
+                detuneRow.appendChild(detuneValue);
+                
+                // Gain Curve control
+                const gainCurveRow = document.createElement('div');
+                gainCurveRow.className = 'audio-controls-row';
+                
+                const gainCurveLabel = document.createElement('span');
+                gainCurveLabel.textContent = 'Curve:';
+                gainCurveLabel.style.minWidth = '50px';
+                gainCurveLabel.style.fontSize = '12px';
+                
+                const gainCurveSlider = document.createElement('input');
+                gainCurveSlider.type = 'range';
+                gainCurveSlider.className = 'slider';
+                gainCurveSlider.id = `speciesGainCurve${i}`;
+                gainCurveSlider.min = '0.1';
+                gainCurveSlider.max = '3.0';
+                gainCurveSlider.step = '0.1';
+                const currentGainCurve = (synth && typeof synth.gainCurve !== 'undefined') ? synth.gainCurve : 1.0;
+                gainCurveSlider.value = currentGainCurve.toString();
+                gainCurveSlider.style.flex = '1';
+                gainCurveSlider.addEventListener('input', (e) => setSpeciesGainCurve(i, parseFloat(e.target.value)));
+                
+                const gainCurveValue = document.createElement('span');
+                gainCurveValue.className = 'value-display';
+                gainCurveValue.id = `speciesGainCurve${i}-value`;
+                gainCurveValue.textContent = currentGainCurve.toFixed(1);
+                
+                gainCurveRow.appendChild(gainCurveLabel);
+                gainCurveRow.appendChild(gainCurveSlider);
+                gainCurveRow.appendChild(gainCurveValue);
+                
+                // Fade Length control
+                const fadeRow = document.createElement('div');
+                fadeRow.className = 'audio-controls-row';
+                
+                const fadeLabel = document.createElement('span');
+                fadeLabel.textContent = 'Fade:';
+                fadeLabel.style.minWidth = '50px';
+                fadeLabel.style.fontSize = '12px';
+                
+                const fadeSlider = document.createElement('input');
+                fadeSlider.type = 'range';
+                fadeSlider.className = 'slider';
+                fadeSlider.id = `speciesFade${i}`;
+                fadeSlider.min = '0.001';
+                fadeSlider.max = '0.02';
+                fadeSlider.step = '0.001';
+                const currentFade = (synth && typeof synth.fadeLength !== 'undefined') ? synth.fadeLength : 0.002;
+                fadeSlider.value = currentFade.toString();
+                fadeSlider.style.flex = '1';
+                fadeSlider.addEventListener('input', (e) => setSpeciesFadeLength(i, parseFloat(e.target.value)));
+                
+                const fadeValue = document.createElement('span');
+                fadeValue.className = 'value-display';
+                fadeValue.id = `speciesFade${i}-value`;
+                fadeValue.textContent = `${Math.round(currentFade * 1000)}ms`;
+                
+                fadeRow.appendChild(fadeLabel);
+                fadeRow.appendChild(fadeSlider);
+                fadeRow.appendChild(fadeValue);
+                
+                // Activity indicators
+                const activityRow = document.createElement('div');
+                activityRow.className = 'audio-controls-row';
+                
+                const activityLabel = document.createElement('span');
+                activityLabel.textContent = 'Grains:';
+                activityLabel.style.minWidth = '50px';
+                activityLabel.style.fontSize = '12px';
+                
+                const grainActivity = document.createElement('div');
+                grainActivity.className = 'grain-activity';
+                grainActivity.id = `grainActivity${i}`;
+                
+                // Create grain indicators
+                for (let j = 0; j < 10; j++) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'grain-indicator';
+                    grainActivity.appendChild(indicator);
+                }
+                
+                const audioMeter = document.createElement('div');
+                audioMeter.className = 'audio-meter';
+                
+                const meterBar = document.createElement('div');
+                meterBar.className = 'meter-bar';
+                
+                const meterFill = document.createElement('div');
+                meterFill.className = 'meter-fill';
+                meterFill.id = `meterFill${i}`;
+                
+                meterBar.appendChild(meterFill);
+                audioMeter.appendChild(meterBar);
+                
+                const grainCount = document.createElement('span');
+                grainCount.id = `grainCount${i}`;
+                grainCount.textContent = '0/50';
+                grainCount.style.fontSize = '11px';
+                grainCount.style.color = '#888';
+                
+                audioMeter.appendChild(grainCount);
+                
+                activityRow.appendChild(activityLabel);
+                activityRow.appendChild(grainActivity);
+                activityRow.appendChild(audioMeter);
+                
+                // Assemble panel
+                panel.appendChild(header);
+                panel.appendChild(fileControls);
+                panel.appendChild(waveformContainer);
+                panel.appendChild(volumeRow);
+                panel.appendChild(loopRow);
+                panel.appendChild(pitchRow);
+                panel.appendChild(detuneRow);
+                panel.appendChild(gainCurveRow);
+                panel.appendChild(fadeRow);
+                panel.appendChild(activityRow);
+                
+                container.appendChild(panel);
+                
+                // Draw waveform if audio buffer exists
+                if (synth && synth.audioBuffer) {
+                    drawWaveform(synth.audioBuffer, waveformCanvas, speciesColors[i], i);
+                }
+            }
+        }
+
+        // Update audio UI indicators - defined globally
+        function updateAudioUI() {
+            for (let i = 0; i < speciesCount; i++) {
+                if (!speciesAudioSynths[i]) continue;
+                
+                const synth = speciesAudioSynths[i];
+                const grainCount = synth.activeGrains;
+                
+                // Update grain count
+                const grainCountElement = document.getElementById(`grainCount${i}`);
+                if (grainCountElement) {
+                    grainCountElement.textContent = `${grainCount}/${synth.maxGrains}`;
+                }
+                
+                // Update grain activity indicators
+                const grainActivity = document.getElementById(`grainActivity${i}`);
+                if (grainActivity) {
+                    const indicators = grainActivity.children;
+                    for (let j = 0; j < indicators.length; j++) {
+                        indicators[j].classList.toggle('active', j < Math.ceil(grainCount / 5));
+                    }
+                }
+                
+                // Update audio level meter
+                const meterFill = document.getElementById(`meterFill${i}`);
+                if (meterFill) {
+                    const level = Math.min(100, (grainCount / synth.maxGrains) * 100);
+                    meterFill.style.width = `${level}%`;
+                }
+            }
+        }
+
+        // Spatial Grid Class for O(N) force calculation optimization
+        class SpatialGrid {
+            constructor(canvasWidth, canvasHeight, cellSize) {
+                this.canvasWidth = canvasWidth;
+                this.canvasHeight = canvasHeight;
+                this.cellSize = cellSize;
+                
+                // Calculate grid dimensions
+                this.gridWidth = Math.ceil(canvasWidth / cellSize);
+                this.gridHeight = Math.ceil(canvasHeight / cellSize);
+                
+                // Create 2D grid array - each cell contains array of particles
+                this.grid = [];
+                for (let i = 0; i < this.gridWidth * this.gridHeight; i++) {
+                    this.grid[i] = [];
+                }
+                
+                console.log(`Spatial Grid: ${this.gridWidth}x${this.gridHeight} cells, cell size: ${cellSize}`);
+            }
+            
+            // Convert world coordinates to grid coordinates
+            worldToGrid(x, y) {
+                // Handle toroidal wrapping
+                x = ((x % this.canvasWidth) + this.canvasWidth) % this.canvasWidth;
+                y = ((y % this.canvasHeight) + this.canvasHeight) % this.canvasHeight;
+                
+                const gridX = Math.floor(x / this.cellSize);
+                const gridY = Math.floor(y / this.cellSize);
+                
+                return {
+                    x: Math.max(0, Math.min(this.gridWidth - 1, gridX)),
+                    y: Math.max(0, Math.min(this.gridHeight - 1, gridY))
+                };
+            }
+            
+            // Convert grid coordinates to linear index
+            gridToIndex(gridX, gridY) {
+                return gridY * this.gridWidth + gridX;
+            }
+            
+            // Clear all grid cells
+            clear() {
+                for (let i = 0; i < this.grid.length; i++) {
+                    this.grid[i].length = 0; // Fast array clear
+                }
+            }
+            
+            // Add particle to appropriate grid cell
+            insertParticle(particle) {
+                const gridPos = this.worldToGrid(particle.x, particle.y);
+                const index = this.gridToIndex(gridPos.x, gridPos.y);
+                this.grid[index].push(particle);
+            }
+            
+            // Get all particles in neighboring cells (including current cell)
+            // Returns particles that could potentially interact with a particle at (x, y)
+            getNearbyParticles(x, y) {
+                const centerGrid = this.worldToGrid(x, y);
+                const nearbyParticles = [];
+                
+                // Check 3x3 neighborhood (including center cell)
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        let gridX = centerGrid.x + dx;
+                        let gridY = centerGrid.y + dy;
+                        
+                        // Handle toroidal wrapping for grid coordinates
+                        gridX = ((gridX % this.gridWidth) + this.gridWidth) % this.gridWidth;
+                        gridY = ((gridY % this.gridHeight) + this.gridHeight) % this.gridHeight;
+                        
+                        const index = this.gridToIndex(gridX, gridY);
+                        
+                        // Add all particles from this cell
+                        const cell = this.grid[index];
+                        for (let i = 0; i < cell.length; i++) {
+                            nearbyParticles.push(cell[i]);
+                        }
+                    }
+                }
+                
+                return nearbyParticles;
+            }
+            
+            // Update grid cell size (when force radius changes)
+            updateCellSize(newCellSize) {
+                this.cellSize = newCellSize;
+                this.gridWidth = Math.ceil(this.canvasWidth / newCellSize);
+                this.gridHeight = Math.ceil(this.canvasHeight / newCellSize);
+                
+                // Recreate grid with new dimensions
+                const newSize = this.gridWidth * this.gridHeight;
+                if (this.grid.length !== newSize) {
+                    this.grid = [];
+                    for (let i = 0; i < newSize; i++) {
+                        this.grid[i] = [];
+                    }
+                    console.log(`Spatial Grid resized: ${this.gridWidth}x${this.gridHeight} cells`);
+                }
+            }
+        }
+
+        // Circular Buffer class for efficient trail management
+        class CircularBuffer {
+            constructor(maxSize) {
+                this.buffer = new Float32Array(maxSize * 2); // x, y pairs
+                this.maxSize = maxSize;
+                this.head = 0;
+                this.size = 0;
+            }
+            
+            push(x, y) {
+                const index = this.head * 2;
+                this.buffer[index] = x;
+                this.buffer[index + 1] = y;
+                
+                this.head = (this.head + 1) % this.maxSize;
+                if (this.size < this.maxSize) {
+                    this.size++;
+                }
+            }
+            
+            getPoint(index) {
+                if (index >= this.size) return null;
+                
+                const actualIndex = (this.head - this.size + index + this.maxSize) % this.maxSize;
+                const bufferIndex = actualIndex * 2;
+                return {
+                    x: this.buffer[bufferIndex],
+                    y: this.buffer[bufferIndex + 1],
+                    age: index / this.size // 0 = oldest, 1 = newest
+                };
+            }
+            
+            clear() {
+                this.head = 0;
+                this.size = 0;
+            }
+            
+            resize(newMaxSize) {
+                if (newMaxSize === this.maxSize) return;
+                
+                const oldBuffer = this.buffer;
+                const oldSize = this.size;
+                const oldHead = this.head;
+                const oldMaxSize = this.maxSize;
+                
+                this.buffer = new Float32Array(newMaxSize * 2);
+                this.maxSize = newMaxSize;
+                this.head = 0;
+                this.size = 0;
+                
+                // Copy existing points to new buffer
+                const pointsToCopy = Math.min(oldSize, newMaxSize);
+                for (let i = 0; i < pointsToCopy; i++) {
+                    const actualIndex = (oldHead - oldSize + i + oldMaxSize) % oldMaxSize;
+                    const bufferIndex = actualIndex * 2;
+                    this.push(oldBuffer[bufferIndex], oldBuffer[bufferIndex + 1]);
+                }
+            }
+        }
+
+        // Particle class with optimized trail system
+        class Particle {
+            constructor(species) {
+                this.species = species;
+                this.x = Math.random() * canvasWidth;
+                this.y = Math.random() * canvasHeight;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.updateSize();
+                this.visualSize = this.size; // Initialize visual size
+                
+                // Set color based on species
+                this.color = [...speciesColors[species]];
+                
+                // Circular buffer for trail history with species-specific size
+                const maxTrailPoints = Math.max(1, Math.floor(speciesTrailLengths[species] * 150));
+                this.trailBuffer = new CircularBuffer(maxTrailPoints);
+            }
+
+            updateSize() {
+                this.size = particleSizes[this.species];
+                
+                // Calculate visual size (enhanced when size = 10)
+                this.visualSize = this.size;
+                if (this.size >= 10) {
+                    this.visualSize = this.size * 1.5; // 50% larger visual representation
+                }
+            }
+
+            update() {
+                // Calculate forces from nearby particles only (using spatial grid)
+                let fx = 0;
+                let fy = 0;
+
+                // Get nearby particles from spatial grid instead of all particles
+                const nearbyParticles = spatialGrid.getNearbyParticles(this.x, this.y);
+
+                for (let i = 0; i < nearbyParticles.length; i++) {
+                    const other = nearbyParticles[i];
+                    if (other === this) continue;
+
+                    // Calculate distance with toroidal wrapping (if enabled)
+                    let dx = other.x - this.x;
+                    let dy = other.y - this.y;
+                    
+                    // Handle toroidal space - find shortest distance across wrapping edges
+                    if (TOROIDAL_SPACE) {
+                        if (Math.abs(dx) > canvasWidth / 2) {
+                            dx = dx > 0 ? dx - canvasWidth : dx + canvasWidth;
+                        }
+                        if (Math.abs(dy) > canvasHeight / 2) {
+                            dy = dy > 0 ? dy - canvasHeight : dy + canvasHeight;
+                        }
+                    }
+                    
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Calculate collision distance (sum of both particle radii)
+                    let collisionDistance = this.size + other.size;
+                    
+                    // Handle collision - push particles apart if they're overlapping
+                    if (distance < collisionDistance && distance > 0) {
+                        let overlap = collisionDistance - distance;
+                        let separationForce = overlap * 0.5; // Adjust strength as needed
+                        
+                        // Normalize direction vector
+                        let normalizedDx = dx / distance;
+                        let normalizedDy = dy / distance;
+                        
+                        // Apply separation force (push away from each other)
+                        fx -= separationForce * normalizedDx;
+                        fy -= separationForce * normalizedDy;
+                        
+                        // Also apply some velocity damping on collision
+                        this.vx *= 0.8;
+                        this.vy *= 0.8;
+                    }
+
+                    // Skip normal force calculation if outside force range
+                    if (distance > MAX_FORCE_DISTANCE || distance < 1) continue;
+
+                    // Get force strength from relationship matrix
+                    let forceStrength = RELATIONSHIP_MATRIX[this.species][other.species];
+
+                    // Calculate force falloff (smooth falloff to 0)
+                    let falloff = 1 - (distance / MAX_FORCE_DISTANCE);
+                    falloff = falloff * falloff; // Quadratic falloff for smoother effect
+
+                    // Calculate force components
+                    let force = forceStrength * falloff;
+                    let normalizedDx = dx / distance;
+                    let normalizedDy = dy / distance;
+
+                    fx += force * normalizedDx;
+                    fy += force * normalizedDy;
+                }
+
+                // Apply gravity force if active
+                if (gravityPoint.active && GRAVITY_STRENGTH > 0) {
+                    const gravityDx = gravityPoint.x - this.x;
+                    const gravityDy = gravityPoint.y - this.y;
+                    const gravityDistance = Math.sqrt(gravityDx * gravityDx + gravityDy * gravityDy);
+                    
+                    if (gravityDistance > 1) { // Avoid division by zero
+                        // Calculate gravity force (inverse square law with minimum distance)
+                        const minDistance = 20; // Minimum distance to prevent extreme forces
+                        const effectiveDistance = Math.max(gravityDistance, minDistance);
+                        const gravityForce = GRAVITY_STRENGTH / (effectiveDistance * effectiveDistance) * 1000; // Scale factor
+                        
+                        // Normalize and apply gravity
+                        const normalizedGravityDx = gravityDx / gravityDistance;
+                        const normalizedGravityDy = gravityDy / gravityDistance;
+                        
+                        fx += gravityForce * normalizedGravityDx;
+                        fy += gravityForce * normalizedGravityDy;
+                    }
+                }
+
+                // Apply forces to velocity (scaled by simulation speed)
+                this.vx += fx * 0.1 * SIMULATION_SPEED;
+                this.vy += fy * 0.1 * SIMULATION_SPEED;
+
+                // Apply friction
+                this.vx *= FRICTION;
+                this.vy *= FRICTION;
+
+                // Limit maximum speed
+                let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (speed > MAX_SPEED) {
+                    this.vx = (this.vx / speed) * MAX_SPEED;
+                    this.vy = (this.vy / speed) * MAX_SPEED;
+                }
+
+                // Update position (scaled by simulation speed)
+                this.x += this.vx * SIMULATION_SPEED;
+                this.y += this.vy * SIMULATION_SPEED;
+
+                // Handle boundary conditions based on toroidal space setting
+                if (TOROIDAL_SPACE) {
+                    // Implement toroidal wrapping
+                    if (this.x < 0) this.x += canvasWidth;
+                    if (this.x > canvasWidth) this.x -= canvasWidth;
+                    if (this.y < 0) this.y += canvasHeight;
+                    if (this.y > canvasHeight) this.y -= canvasHeight;
+                } else {
+                    // Implement bouncing off walls
+                    if (this.x < this.size) {
+                        this.x = this.size;
+                        this.vx = Math.abs(this.vx) * 0.8; // Bounce with some energy loss
+                    }
+                    if (this.x > canvasWidth - this.size) {
+                        this.x = canvasWidth - this.size;
+                        this.vx = -Math.abs(this.vx) * 0.8;
+                    }
+                    if (this.y < this.size) {
+                        this.y = this.size;
+                        this.vy = Math.abs(this.vy) * 0.8;
+                    }
+                    if (this.y > canvasHeight - this.size) {
+                        this.y = canvasHeight - this.size;
+                        this.vy = -Math.abs(this.vy) * 0.8;
+                    }
+                }
+                
+                // Add current position to trail buffer
+                this.trailBuffer.push(this.x, this.y);
+                
+                // Dynamically resize trail buffer based on species-specific trail length
+                const speciesTrailFade = speciesTrailLengths[this.species] || 0.5;
+                const newMaxLength = Math.max(1, Math.floor(speciesTrailFade * 150)); // 1 to 150 points
+                if (this.trailBuffer.maxSize !== newMaxLength) {
+                    this.trailBuffer.resize(newMaxLength);
+                }
+            }
+        }
+
+        // Initialize particles
+        function initParticles() {
+            particles = [];
+            
+            // Create particles for each active species
+            for (let species = 0; species < speciesCount; species++) {
+                for (let i = 0; i < particleCounts[species]; i++) {
+                    particles.push(new Particle(species));
+                }
+            }
+            
+            updateParticleCountDisplay();
+        }
+
+        // Initialize spatial grid system
+        function initSpatialGrid() {
+            // Use force radius as cell size for optimal performance
+            spatialGrid = new SpatialGrid(canvasWidth, canvasHeight, MAX_FORCE_DISTANCE);
+            console.log('🚀 Spatial partitioning enabled! Force calculations optimized from O(N²) to O(N)');
+        }
+
+        // Initialize GPU trail system
+        function initTrailSystem() {
+            // Create trail shader program
+            const trailVertexShader = createShader(gl, gl.VERTEX_SHADER, trailVertexShaderSource);
+            const trailFragmentShader = createShader(gl, gl.FRAGMENT_SHADER, trailFragmentShaderSource);
+            trailProgram = createProgram(gl, trailVertexShader, trailFragmentShader);
+
+            // Create fade shader program for species-adaptive decay
+            const fadeVertexShader = createShader(gl, gl.VERTEX_SHADER, fadeVertexShaderSource);
+            const fadeFragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fadeFragmentShaderSource);
+            fadeProgram = createProgram(gl, fadeVertexShader, fadeFragmentShader);
+
+            // Create framebuffer and texture for trail persistence
+            trailFramebuffer = gl.createFramebuffer();
+            trailTexture = gl.createTexture();
+            
+            gl.bindTexture(gl.TEXTURE_2D, trailTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWidth, canvasHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            
+            gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, trailTexture, 0);
+            
+            // Create buffers for trail rendering
+            trailPositionBuffer = gl.createBuffer();
+            trailColorBuffer = gl.createBuffer();
+            trailSizeBuffer = gl.createBuffer();
+            
+            // Create quad buffer for fade effect
+            quadBuffer = gl.createBuffer();
+            const quadVertices = new Float32Array([
+                -1, -1,  1, -1,  -1, 1,
+                -1, 1,   1, -1,   1, 1
+            ]);
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+            
+            // Clear trail texture to black
+            gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            
+            console.log('🎨 GPU trail system initialized with species-adaptive decay!');
+        }
+
+        // Calculate adaptive fade rate based on active species trail lengths
+        function calculateAdaptiveFadeRate() {
+            if (speciesCount === 0) return 0.95;
+            
+            // Calculate weighted average of species trail lengths based on particle counts
+            let totalWeight = 0;
+            let weightedSum = 0;
+            
+            for (let i = 0; i < speciesCount; i++) {
+                const weight = particleCounts[i];
+                const trailLength = speciesTrailLengths[i] || 0.5;
+                totalWeight += weight;
+                weightedSum += trailLength * weight;
+            }
+            
+            const averageTrailLength = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+            
+            // Convert trail length (0-1) to fade rate (0.92-0.98)
+            // Longer trails = higher fade rate (closer to 1)
+            const fadeRate = 0.92 + (averageTrailLength * 0.06);
+            
+            return fadeRate;
+        }
+
+        // Enhanced trail rendering with species-specific handling
+        function renderTrailsGPU() {
+            // Step 1: Apply adaptive decay to existing trails
+            gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer);
+            
+            gl.useProgram(fadeProgram);
+            gl.bindTexture(gl.TEXTURE_2D, trailTexture);
+            
+            // Use adaptive fade rate based on active species
+            const fadeAmount = calculateAdaptiveFadeRate();
+            
+            const fadeAmountLocation = gl.getUniformLocation(fadeProgram, 'u_fadeAmount');
+            const fadeTextureLocation = gl.getUniformLocation(fadeProgram, 'u_texture');
+            
+            gl.uniform1f(fadeAmountLocation, fadeAmount);
+            gl.uniform1i(fadeTextureLocation, 0);
+            
+            // Render fullscreen quad to apply fade
+            const fadePositionLocation = gl.getAttribLocation(fadeProgram, 'a_position');
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.enableVertexAttribArray(fadePositionLocation);
+            gl.vertexAttribPointer(fadePositionLocation, 2, gl.FLOAT, false, 0, 0);
+            
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            
+            // Step 2: Render new trail points with enhanced quality
+            gl.useProgram(trailProgram);
+            
+            // Collect all trail points from all particles into batched arrays
+            const maxTrailPoints = particles.reduce((sum, p) => sum + p.trailBuffer.size, 0);
+            if (maxTrailPoints === 0) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                return;
+            }
+            
+            const positions = new Float32Array(maxTrailPoints * 2);
+            const colors = new Float32Array(maxTrailPoints * 4); // RGBA
+            const sizes = new Float32Array(maxTrailPoints); // Particle sizes for trail thickness
+            
+            let pointCount = 0;
+            
+            // Process each particle's trail with species-specific alpha calculation
+            for (let particle of particles) {
+                const buffer = particle.trailBuffer;
+                const r = particle.color[0];
+                const g = particle.color[1];
+                const b = particle.color[2];
+                const speciesTrailLength = speciesTrailLengths[particle.species] || 0.5;
+                const particleSize = particle.size;
+                
+                // Enhanced alpha calculation for more vibrant trails
+                for (let i = 0; i < buffer.size; i++) {
+                    const point = buffer.getPoint(i);
+                    if (!point) continue;
+                    
+                    const index = pointCount * 2;
+                    const colorIndex = pointCount * 4;
+                    
+                    positions[index] = point.x;
+                    positions[index + 1] = point.y;
+                    sizes[pointCount] = particleSize; // Use logical size for trails, not visual size
+                    
+                    // Enhanced alpha calculation with more visibility
+                    const normalizedAge = point.age; // 0 = oldest, 1 = newest
+                    const baseAlpha = speciesTrailLength * 1.2; // Increased base alpha for more visibility
+                    const exponentialFalloff = Math.pow(normalizedAge, 1.2); // Adjusted curve
+                    const alpha = Math.min(1.0, baseAlpha * exponentialFalloff);
+                    
+                    colors[colorIndex] = r;
+                    colors[colorIndex + 1] = g;
+                    colors[colorIndex + 2] = b;
+                    colors[colorIndex + 3] = alpha;
+                    
+                    pointCount++;
+                }
+            }
+            
+            if (pointCount > 0) {
+                // Upload batched data to GPU
+                const trailPosLocation = gl.getAttribLocation(trailProgram, 'a_position');
+                const trailColorLocation = gl.getAttribLocation(trailProgram, 'a_color');
+                const trailAlphaLocation = gl.getAttribLocation(trailProgram, 'a_alpha');
+                const trailSizeLocation = gl.getAttribLocation(trailProgram, 'a_size');
+                const trailResolutionLocation = gl.getUniformLocation(trailProgram, 'u_resolution');
+                
+                gl.uniform2f(trailResolutionLocation, canvasWidth, canvasHeight);
+                
+                // Position buffer
+                gl.bindBuffer(gl.ARRAY_BUFFER, trailPositionBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, positions.subarray(0, pointCount * 2), gl.DYNAMIC_DRAW);
+                gl.enableVertexAttribArray(trailPosLocation);
+                gl.vertexAttribPointer(trailPosLocation, 2, gl.FLOAT, false, 0, 0);
+                
+                // Color + Alpha buffer (interleaved)
+                gl.bindBuffer(gl.ARRAY_BUFFER, trailColorBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, colors.subarray(0, pointCount * 4), gl.DYNAMIC_DRAW);
+                gl.enableVertexAttribArray(trailColorLocation);
+                gl.vertexAttribPointer(trailColorLocation, 3, gl.FLOAT, false, 16, 0);
+                gl.enableVertexAttribArray(trailAlphaLocation);
+                gl.vertexAttribPointer(trailAlphaLocation, 1, gl.FLOAT, false, 16, 12);
+                
+                // Size buffer for trail thickness
+                gl.bindBuffer(gl.ARRAY_BUFFER, trailSizeBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, sizes.subarray(0, pointCount), gl.DYNAMIC_DRAW);
+                gl.enableVertexAttribArray(trailSizeLocation);
+                gl.vertexAttribPointer(trailSizeLocation, 1, gl.FLOAT, false, 0, 0);
+                
+                // Enhanced blending for more vibrant trails
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                
+                // Render all trail points in single draw call
+                gl.drawArrays(gl.POINTS, 0, pointCount);
+            }
+            
+            // Switch back to default framebuffer for main rendering
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+
+        // Render the trail texture as background
+        function renderTrailBackground() {
+            gl.useProgram(fadeProgram);
+            gl.bindTexture(gl.TEXTURE_2D, trailTexture);
+            
+            const fadeTextureLocation = gl.getUniformLocation(fadeProgram, 'u_texture');
+            const fadeAmountLocation = gl.getUniformLocation(fadeProgram, 'u_fadeAmount');
+            
+            gl.uniform1i(fadeTextureLocation, 0);
+            gl.uniform1f(fadeAmountLocation, 1.0); // Full opacity for background
+            
+            const fadePositionLocation = gl.getAttribLocation(fadeProgram, 'a_position');
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.enableVertexAttribArray(fadePositionLocation);
+            gl.vertexAttribPointer(fadePositionLocation, 2, gl.FLOAT, false, 0, 0);
+            
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        // Adjust particle counts dynamically
+        function adjustParticleCounts() {
+            // Count current particles by species
+            let currentCounts = new Array(maxSpecies).fill(0);
+            for (let particle of particles) {
+                currentCounts[particle.species]++;
+            }
+
+            // Adjust each active species
+            for (let species = 0; species < speciesCount; species++) {
+                let currentCount = currentCounts[species];
+                let targetCount = particleCounts[species];
+
+                if (currentCount < targetCount) {
+                    // Add particles
+                    for (let i = currentCount; i < targetCount; i++) {
+                        particles.push(new Particle(species));
+                    }
+                } else if (currentCount > targetCount) {
+                    // Remove particles
+                    let toRemove = currentCount - targetCount;
+                    for (let i = particles.length - 1; i >= 0 && toRemove > 0; i--) {
+                        if (particles[i].species === species) {
+                            particles.splice(i, 1);
+                            toRemove--;
+                        }
+                    }
+                }
+            }
+
+            // Remove particles from inactive species
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (particles[i].species >= speciesCount) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            updateParticleCountDisplay();
+        }
+
+        // Update particle sizes
+        function updateParticleSizes() {
+            for (let particle of particles) {
+                particle.updateSize();
+            }
+        }
+
+        // Update particle positions with audio integration
+        function updateParticles() {
+            if (isPaused) return;
+            
+            // Rebuild spatial grid each frame for optimal performance
+            spatialGrid.clear();
+            
+            // Insert all particles into spatial grid
+            for (let i = 0; i < particles.length; i++) {
+                spatialGrid.insertParticle(particles[i]);
+            }
+            
+            // Update particles using spatial optimization
+            for (let particle of particles) {
+                particle.update();
+            }
+            
+            // Update audio system with new particle positions
+            updateAudioSystem();
+        }
+
+        // Render particles with optimized trail system
+        function render() {
+            // Step 1: Update trails with GPU-based adaptive decay and add new trail points
+            renderTrailsGPU();
+            
+            // Step 2: Render trail background texture on main canvas
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            
+            renderTrailBackground();
+            
+            // Step 3: Render current particles on top
+            gl.useProgram(program);
+            
+            // Set resolution uniform
+            gl.uniform2f(resolutionUniformLocation, canvasWidth, canvasHeight);
+            
+            // Prepare particle data
+            const positions = new Float32Array(particles.length * 2);
+            const sizes = new Float32Array(particles.length);
+            const colors = new Float32Array(particles.length * 3);
+            
+            for (let i = 0; i < particles.length; i++) {
+                positions[i * 2] = particles[i].x;
+                positions[i * 2 + 1] = particles[i].y;
+                sizes[i] = particles[i].visualSize; // Use visual size for rendering
+                colors[i * 3] = particles[i].color[0];
+                colors[i * 3 + 1] = particles[i].color[1];
+                colors[i * 3 + 2] = particles[i].color[2];
+            }
+            
+            // Upload position data
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+            gl.enableVertexAttribArray(positionAttributeLocation);
+            gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+            
+            // Upload size data
+            gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, sizes, gl.DYNAMIC_DRAW);
+            gl.enableVertexAttribArray(sizeAttributeLocation);
+            gl.vertexAttribPointer(sizeAttributeLocation, 1, gl.FLOAT, false, 0, 0);
+            
+            // Upload color data
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
+            gl.enableVertexAttribArray(colorAttributeLocation);
+            gl.vertexAttribPointer(colorAttributeLocation, 3, gl.FLOAT, false, 0, 0);
+            
+            // Enable blending for nice particle rendering
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            
+            // Draw particles on top of trails
+            gl.drawArrays(gl.POINTS, 0, particles.length);
+        }
+
+        // Animation loop with FPS tracking
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+        let fpsUpdateTime = performance.now();
+
+        function animate() {
+            const currentTime = performance.now();
+            
+            updateParticles();
+            render();
+            
+            // FPS tracking
+            frameCount++;
+            if (currentTime - fpsUpdateTime >= 500) { // Update every 500ms
+                const fps = Math.round((frameCount * 1000) / (currentTime - fpsUpdateTime));
+                document.getElementById('fps-display').textContent = fps;
+                
+                // Update canvas size display
+                document.getElementById('canvas-size').textContent = `${canvasWidth}×${canvasHeight}`;
+                
+                // Update particle count display
+                document.getElementById('total-particles').textContent = particles.length;
+                
+                // Update grid info
+                if (spatialGrid) {
+                    const gridInfo = `${spatialGrid.gridWidth}×${spatialGrid.gridHeight} cells`;
+                    document.getElementById('grid-info').textContent = gridInfo;
+                }
+                
+                frameCount = 0;
+                fpsUpdateTime = currentTime;
+            }
+            
+            lastFrameTime = currentTime;
+            requestAnimationFrame(animate);
+        }
+
+        // Control functions
+        function resetSimulation() {
+            // Clear GPU trail texture
+            if (trailFramebuffer) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer);
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            }
+            
+            // Clear all particle trail buffers
+            for (let particle of particles) {
+                particle.trailBuffer.clear();
+            }
+            
+            initParticles();
+            isPaused = false;
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+        }
+
+        function updateParticleCountDisplay() {
+            // This function is no longer needed but kept for compatibility
+        }
+
+        // Setup canvas mouse interaction for gravity
+        function setupCanvasInteraction() {
+            const canvas = document.getElementById('canvas');
+            
+            canvas.addEventListener('mousedown', (e) => {
+                if (GRAVITY_STRENGTH > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    gravityPoint.x = x;
+                    gravityPoint.y = y;
+                    gravityPoint.active = true;
+                    isMouseDown = true;
+                    
+                    console.log(`🌍 Gravity point activated at (${Math.round(x)}, ${Math.round(y)})`);
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (isMouseDown && GRAVITY_STRENGTH > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    gravityPoint.x = x;
+                    gravityPoint.y = y;
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseup', (e) => {
+                if (isMouseDown) {
+                    gravityPoint.active = false;
+                    isMouseDown = false;
+                    console.log('🌍 Gravity point deactivated');
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseleave', (e) => {
+                if (isMouseDown) {
+                    gravityPoint.active = false;
+                    isMouseDown = false;
+                    console.log('🌍 Gravity point deactivated (mouse left canvas)');
+                }
+            });
+            
+            // Update cursor based on gravity setting
+            function updateCanvasCursor() {
+                if (GRAVITY_STRENGTH > 0) {
+                    canvas.style.cursor = 'crosshair';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            }
+            
+            // Update cursor initially and when gravity changes
+            updateCanvasCursor();
+            
+            // Update cursor when gravity strength changes
+            document.getElementById('gravityStrength').addEventListener('input', updateCanvasCursor);
+        }
+        function setupCanvasInteraction() {
+            const canvas = document.getElementById('canvas');
+            
+            canvas.addEventListener('mousedown', (e) => {
+                if (GRAVITY_STRENGTH > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    gravityPoint.x = x;
+                    gravityPoint.y = y;
+                    gravityPoint.active = true;
+                    isMouseDown = true;
+                    
+                    console.log(`🌍 Gravity point activated at (${Math.round(x)}, ${Math.round(y)})`);
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (isMouseDown && GRAVITY_STRENGTH > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    gravityPoint.x = x;
+                    gravityPoint.y = y;
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseup', (e) => {
+                if (isMouseDown) {
+                    gravityPoint.active = false;
+                    isMouseDown = false;
+                    console.log('🌍 Gravity point deactivated');
+                }
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseleave', (e) => {
+                if (isMouseDown) {
+                    gravityPoint.active = false;
+                    isMouseDown = false;
+                    console.log('🌍 Gravity point deactivated (mouse left canvas)');
+                }
+            });
+            
+            // Update cursor based on gravity setting
+            function updateCanvasCursor() {
+                if (GRAVITY_STRENGTH > 0) {
+                    canvas.style.cursor = 'crosshair';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            }
+            
+            // Update cursor initially and when gravity changes
+            updateCanvasCursor();
+            
+            // Update cursor when gravity strength changes
+            document.getElementById('gravityStrength').addEventListener('input', updateCanvasCursor);
+        }
+
+        // Update trail preview in UI - REMOVED
+        // function updateTrailPreview(speciesIndex) removed
+
+        // Slider event handlers
+        function setupSliders() {
+            // Species count slider
+            document.getElementById('speciesCount').addEventListener('input', (e) => {
+                speciesCount = parseInt(e.target.value);
+                document.getElementById('speciesCount-value').textContent = speciesCount;
+                
+                // Regenerate UI and adjust particles
+                createParticleSettings();
+                createForceMatrix();
+                setupDraggableNumbers();
+                adjustParticleCounts();
+                
+                // Regenerate audio controls if audio is initialized
+                if (isAudioEnabled && speciesAudioSynths.length > 0) {
+                    initSpeciesSynths();
+                }
+            });
+
+            // Toroidal space toggle
+            document.getElementById('toroidalSpace').addEventListener('change', (e) => {
+                TOROIDAL_SPACE = e.target.checked;
+                console.log(`🌐 Toroidal space: ${TOROIDAL_SPACE ? 'ON' : 'OFF'}`);
+            });
+
+            // Friction slider
+            document.getElementById('friction').addEventListener('input', (e) => {
+                FRICTION = parseFloat(e.target.value);
+                document.getElementById('friction-value').textContent = FRICTION.toFixed(2);
+            });
+
+            // Force radius slider
+            document.getElementById('forceRadius').addEventListener('input', (e) => {
+                MAX_FORCE_DISTANCE = parseFloat(e.target.value);
+                document.getElementById('forceRadius-value').textContent = MAX_FORCE_DISTANCE.toFixed(0);
+                
+                // Update spatial grid cell size when force radius changes
+                if (spatialGrid) {
+                    spatialGrid.updateCellSize(MAX_FORCE_DISTANCE);
+                }
+            });
+
+            // Simulation speed slider
+            document.getElementById('simSpeed').addEventListener('input', (e) => {
+                SIMULATION_SPEED = parseFloat(e.target.value);
+                document.getElementById('simSpeed-value').textContent = SIMULATION_SPEED.toFixed(1);
+            });
+
+            // Gravity strength slider
+            document.getElementById('gravityStrength').addEventListener('input', (e) => {
+                GRAVITY_STRENGTH = parseFloat(e.target.value);
+                document.getElementById('gravityStrength-value').textContent = GRAVITY_STRENGTH.toFixed(1);
+            });
+
+            // Audio control sliders
+            document.getElementById('masterVolume').addEventListener('input', (e) => {
+                setMasterVolume(parseFloat(e.target.value));
+            });
+
+            document.getElementById('freqLow').addEventListener('input', (e) => {
+                const low = parseInt(e.target.value);
+                const high = frequencyRange.high;
+                if (low < high) {
+                    setFrequencyRange(low, high);
+                }
+            });
+
+            document.getElementById('freqHigh').addEventListener('input', (e) => {
+                const high = parseInt(e.target.value);
+                const low = frequencyRange.low;
+                if (high > low) {
+                    setFrequencyRange(low, high);
+                }
+            });
+
+            // Master mute button
+            document.getElementById('masterMute').addEventListener('click', toggleMasterMute);
+
+            // Audio initialization button
+            document.getElementById('audioInit').addEventListener('click', async () => {
+                const button = document.getElementById('audioInit');
+                button.textContent = '🎵 Initializing...';
+                button.disabled = true;
+                
+                const success = await initAudioSystem();
+                
+                if (success) {
+                    button.style.display = 'none';
+                } else {
+                    button.textContent = '🎵 Retry Audio';
+                    button.disabled = false;
+                }
+            });
+        }
+
+        // Create particle settings dynamically
+        function createParticleSettings() {
+            const container = document.getElementById('particleSettings');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < speciesCount; i++) {
+                const speciesRow = document.createElement('div');
+                speciesRow.className = 'species-row';
+                
+                const label = document.createElement('span');
+                label.className = 'species-label';
+                label.style.color = rgbToHex(speciesColors[i]);
+                label.textContent = `Species ${String.fromCharCode(65 + i)}:`;
+                
+                const sizeGroup = document.createElement('div');
+                sizeGroup.className = 'param-group';
+                
+                const sizeLabel = document.createElement('span');
+                sizeLabel.className = 'param-label';
+                sizeLabel.textContent = 'Size';
+                
+                const sizeNumber = document.createElement('div');
+                sizeNumber.className = 'draggable-number';
+                sizeNumber.id = `size${i}-drag`;
+                sizeNumber.dataset.value = particleSizes[i];
+                sizeNumber.dataset.min = '2';
+                sizeNumber.dataset.max = '10';
+                sizeNumber.dataset.step = '0.5';
+                sizeNumber.textContent = particleSizes[i].toFixed(1);
+                
+                const countGroup = document.createElement('div');
+                countGroup.className = 'param-group';
+                
+                const countLabel = document.createElement('span');
+                countLabel.className = 'param-label';
+                countLabel.textContent = 'Count';
+                
+                const countNumber = document.createElement('div');
+                countNumber.className = 'draggable-number';
+                countNumber.id = `count${i}-drag`;
+                countNumber.dataset.value = particleCounts[i];
+                countNumber.dataset.min = '1';
+                countNumber.dataset.max = '400';
+                countNumber.dataset.step = '1';
+                countNumber.textContent = particleCounts[i].toString();
+                
+                const trailGroup = document.createElement('div');
+                trailGroup.className = 'param-group';
+                
+                const trailLabel = document.createElement('span');
+                trailLabel.className = 'param-label';
+                trailLabel.textContent = 'Trail';
+                
+                const trailNumber = document.createElement('div');
+                trailNumber.className = 'draggable-number';
+                trailNumber.id = `trail${i}-drag`;
+                trailNumber.dataset.value = speciesTrailLengths[i];
+                trailNumber.dataset.min = '0.0';
+                trailNumber.dataset.max = '1.0';
+                trailNumber.dataset.step = '0.05';
+                trailNumber.textContent = speciesTrailLengths[i].toFixed(2);
+                
+                sizeGroup.appendChild(sizeLabel);
+                sizeGroup.appendChild(sizeNumber);
+                countGroup.appendChild(countLabel);
+                countGroup.appendChild(countNumber);
+                trailGroup.appendChild(trailLabel);
+                trailGroup.appendChild(trailNumber);
+                
+                speciesRow.appendChild(label);
+                speciesRow.appendChild(sizeGroup);
+                speciesRow.appendChild(countGroup);
+                speciesRow.appendChild(trailGroup);
+                
+                container.appendChild(speciesRow);
+            }
+        }
+
+        // Draggable number controls
+        let isDraggingNumber = false;
+        let numberDragStartY = 0;
+        let numberDragStartValue = 0;
+        let currentNumberDragElement = null;
+
+        function setupDraggableNumbers() {
+            const draggableNumbers = document.querySelectorAll('.draggable-number');
+            
+            draggableNumbers.forEach(element => {
+                element.addEventListener('mousedown', startNumberDrag);
+            });
+        }
+
+        function startNumberDrag(e) {
+            e.preventDefault();
+            isDraggingNumber = true;
+            numberDragStartY = e.clientY;
+            currentNumberDragElement = e.target;
+            numberDragStartValue = parseFloat(currentNumberDragElement.dataset.value);
+            
+            currentNumberDragElement.classList.add('dragging');
+            
+            document.addEventListener('mousemove', handleNumberDrag);
+            document.addEventListener('mouseup', stopNumberDrag);
+        }
+
+        function handleNumberDrag(e) {
+            if (!isDraggingNumber || !currentNumberDragElement) return;
+            
+            const deltaY = numberDragStartY - e.clientY; // Inverted: up = increase
+            const step = parseFloat(currentNumberDragElement.dataset.step);
+            const min = parseFloat(currentNumberDragElement.dataset.min);
+            const max = parseFloat(currentNumberDragElement.dataset.max);
+            
+            const sensitivity = step * 0.5; // Adjust sensitivity
+            const newValue = numberDragStartValue + (deltaY * sensitivity);
+            
+            // Clamp between min and max
+            const clampedValue = Math.max(min, Math.min(max, newValue));
+            
+            // Round to step increments
+            const steppedValue = Math.round(clampedValue / step) * step;
+            
+            // Update the element
+            currentNumberDragElement.dataset.value = steppedValue;
+            
+            // Format display based on step size
+            if (step < 1) {
+                currentNumberDragElement.textContent = steppedValue.toFixed(2);
+            } else {
+                currentNumberDragElement.textContent = Math.round(steppedValue).toString();
+            }
+            
+            // Update the corresponding parameter
+            updateParameterFromDrag(currentNumberDragElement.id, steppedValue);
+        }
+
+        function stopNumberDrag(e) {
+            if (isDraggingNumber && currentNumberDragElement) {
+                currentNumberDragElement.classList.remove('dragging');
+            }
+            
+            isDraggingNumber = false;
+            currentNumberDragElement = null;
+            
+            document.removeEventListener('mousemove', handleNumberDrag);
+            document.removeEventListener('mouseup', stopNumberDrag);
+        }
+
+        function updateParameterFromDrag(elementId, value) {
+            // Parse species index from element ID
+            const match = elementId.match(/(size|count|trail)(\d+)-drag/);
+            if (!match) return;
+            
+            const paramType = match[1];
+            const speciesIndex = parseInt(match[2]);
+            
+            if (paramType === 'size') {
+                particleSizes[speciesIndex] = value;
+                updateParticleSizes();
+            } else if (paramType === 'count') {
+                particleCounts[speciesIndex] = Math.round(value);
+                adjustParticleCounts();
+            } else if (paramType === 'trail') {
+                speciesTrailLengths[speciesIndex] = value;
+                
+                // Update existing particles' trail buffer sizes
+                for (let particle of particles) {
+                    if (particle.species === speciesIndex) {
+                        const newMaxLength = Math.max(1, Math.floor(value * 150));
+                        if (particle.trailBuffer.maxSize !== newMaxLength) {
+                            particle.trailBuffer.resize(newMaxLength);
+                        }
+                    }
+                }
+                
+                console.log(`🎨 Species ${String.fromCharCode(65 + speciesIndex)} trail length: ${value.toFixed(2)} -> Audio grain: ${(2 + (value * 198)).toFixed(0)}ms`);
+            }
+        }
+
+        // Force Matrix Management
+        let isDragging = false;
+        let dragStartY = 0;
+        let dragStartValue = 0;
+        let currentCell = null;
+        let colorPickerPairs = []; // Store pairs of color pickers for synchronization
+
+        function createForceMatrix() {
+            const matrixGrid = document.getElementById('forceMatrix');
+            const gridSize = speciesCount + 1; // +1 for headers
+            
+            // Calculate cell size based on species count for compactness
+            const baseCellSize = Math.max(25, 50 - (speciesCount - 2) * 3);
+            matrixGrid.style.fontSize = `${Math.max(9, 12 - speciesCount)}px`;
+            
+            // Set grid template
+            matrixGrid.style.gridTemplateColumns = `repeat(${gridSize}, ${baseCellSize}px)`;
+            matrixGrid.innerHTML = '';
+            colorPickerPairs = []; // Reset pairs
+
+            // Create top-left empty cell
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'matrix-header';
+            emptyCell.style.height = `${baseCellSize}px`;
+            matrixGrid.appendChild(emptyCell);
+
+            // Create column headers (target species)
+            const columnPickers = [];
+            for (let i = 0; i < speciesCount; i++) {
+                const header = document.createElement('div');
+                header.className = 'matrix-header';
+                header.style.height = `${baseCellSize}px`;
+                
+                const colorPicker = document.createElement('input');
+                colorPicker.type = 'color';
+                colorPicker.className = 'species-color-picker';
+                colorPicker.value = rgbToHex(speciesColors[i]);
+                columnPickers[i] = colorPicker;
+                
+                const label = document.createElement('span');
+                label.textContent = String.fromCharCode(65 + i); // A, B, C, etc.
+                
+                header.appendChild(colorPicker);
+                header.appendChild(label);
+                matrixGrid.appendChild(header);
+            }
+
+            // Create matrix rows
+            for (let fromSpecies = 0; fromSpecies < speciesCount; fromSpecies++) {
+                // Row header (source species)
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'matrix-header';
+                rowHeader.style.height = `${baseCellSize}px`;
+                
+                const colorPicker = document.createElement('input');
+                colorPicker.type = 'color';
+                colorPicker.className = 'species-color-picker';
+                colorPicker.value = rgbToHex(speciesColors[fromSpecies]);
+                
+                // Store the pair for this species
+                const columnPicker = columnPickers[fromSpecies];
+                colorPickerPairs[fromSpecies] = { row: colorPicker, column: columnPicker };
+                
+                // Set up bidirectional sync
+                colorPicker.addEventListener('change', (e) => {
+                    updateSpeciesColor(fromSpecies, e.target.value);
+                    columnPicker.value = e.target.value; // Sync column picker
+                });
+                
+                columnPicker.addEventListener('change', (e) => {
+                    updateSpeciesColor(fromSpecies, e.target.value);
+                    colorPicker.value = e.target.value; // Sync row picker
+                });
+                
+                const label = document.createElement('span');
+                label.textContent = String.fromCharCode(65 + fromSpecies);
+                
+                rowHeader.appendChild(colorPicker);
+                rowHeader.appendChild(label);
+                matrixGrid.appendChild(rowHeader);
+
+                // Create cells for this row
+                for (let toSpecies = 0; toSpecies < speciesCount; toSpecies++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'matrix-cell';
+                    cell.style.height = `${baseCellSize}px`;
+                    cell.dataset.from = fromSpecies;
+                    cell.dataset.to = toSpecies;
+                    
+                    // Get current force value
+                    const forceValue = RELATIONSHIP_MATRIX[fromSpecies][toSpecies];
+                    cell.textContent = forceValue.toFixed(2);
+                    
+                    // Set background color based on force value
+                    updateCellAppearance(cell, forceValue);
+                    
+                    // Add drag event listeners
+                    cell.addEventListener('mousedown', startDrag);
+                    
+                    matrixGrid.appendChild(cell);
+                }
+            }
+        }
+
+        function updateCellAppearance(cell, value) {
+            // Clamp value between -1 and 1
+            value = Math.max(-1, Math.min(1, value));
+            
+            if (value > 0) {
+                // Green for attraction
+                const intensity = Math.abs(value);
+                const green = Math.round(68 + intensity * (255 - 68));
+                cell.style.backgroundColor = `rgb(68, ${green}, 68)`;
+                cell.style.color = intensity > 0.5 ? '#000' : '#fff';
+            } else if (value < 0) {
+                // Red for repulsion
+                const intensity = Math.abs(value);
+                const red = Math.round(68 + intensity * (255 - 68));
+                cell.style.backgroundColor = `rgb(${red}, 68, 68)`;
+                cell.style.color = intensity > 0.5 ? '#000' : '#fff';
+            } else {
+                // Gray for neutral
+                cell.style.backgroundColor = '#666';
+                cell.style.color = '#fff';
+            }
+        }
+
+        function startDrag(e) {
+            e.preventDefault();
+            isDragging = true;
+            dragStartY = e.clientY;
+            currentCell = e.target;
+            
+            const fromSpecies = parseInt(currentCell.dataset.from);
+            const toSpecies = parseInt(currentCell.dataset.to);
+            dragStartValue = RELATIONSHIP_MATRIX[fromSpecies][toSpecies];
+            
+            currentCell.classList.add('dragging');
+            
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        function handleDrag(e) {
+            if (!isDragging || !currentCell) return;
+            
+            const deltaY = dragStartY - e.clientY; // Inverted: up = positive
+            const sensitivity = 0.01; // Adjust sensitivity
+            const newValue = dragStartValue + (deltaY * sensitivity);
+            
+            // Clamp between -1 and 1
+            const clampedValue = Math.max(-1, Math.min(1, newValue));
+            
+            const fromSpecies = parseInt(currentCell.dataset.from);
+            const toSpecies = parseInt(currentCell.dataset.to);
+            
+            // Update the relationship matrix
+            RELATIONSHIP_MATRIX[fromSpecies][toSpecies] = clampedValue;
+            
+            // Update cell display
+            currentCell.textContent = clampedValue.toFixed(2);
+            updateCellAppearance(currentCell, clampedValue);
+        }
+
+        function stopDrag(e) {
+            if (isDragging && currentCell) {
+                currentCell.classList.remove('dragging');
+            }
+            
+            isDragging = false;
+            currentCell = null;
+            
+            document.removeEventListener('mousemove', handleDrag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        function updateSpeciesColor(speciesIndex, hexColor) {
+            // Convert hex to RGB array
+            const r = parseInt(hexColor.substr(1, 2), 16) / 255;
+            const g = parseInt(hexColor.substr(3, 2), 16) / 255;
+            const b = parseInt(hexColor.substr(5, 2), 16) / 255;
+            
+            speciesColors[speciesIndex] = [r, g, b];
+            
+            // Update existing particles of this species
+            for (let particle of particles) {
+                if (particle.species === speciesIndex) {
+                    particle.color = [r, g, b];
+                }
+            }
+            
+            // Update species label color in particle settings
+            createParticleSettings();
+            setupDraggableNumbers();
+            
+            // Recreate audio controls if audio is initialized
+            if (isAudioEnabled && speciesAudioSynths.length > 0) {
+                initSpeciesSynths();
+            }
+        }
+
+        function ensureMatrixSize() {
+            // Ensure the relationship matrix has the right dimensions for max species
+            while (RELATIONSHIP_MATRIX.length < maxSpecies) {
+                RELATIONSHIP_MATRIX.push(new Array(maxSpecies).fill(-0.1));
+            }
+            
+            for (let i = 0; i < RELATIONSHIP_MATRIX.length; i++) {
+                while (RELATIONSHIP_MATRIX[i].length < maxSpecies) {
+                    RELATIONSHIP_MATRIX[i].push(-0.1);
+                }
+            }
+        }
+
+        // Initialize and start
+        setupResizeHandling(); // Setup responsive canvas sizing
+        ensureMatrixSize();
+        createParticleSettings();
+        createForceMatrix();
+        setupSliders();
+        setupDraggableNumbers();
+        setupCanvasInteraction(); // Setup gravity interaction
+        initSpatialGrid(); // Initialize spatial partitioning system
+        initTrailSystem(); // Initialize GPU-based trail system with species-adaptive decay
+        initParticles();
+        
+        // Update audio status to show it's ready to initialize
+        updateAudioStatus('Click to Start');
+        
+        animate();
+    </script>
+</body>
+</html>
