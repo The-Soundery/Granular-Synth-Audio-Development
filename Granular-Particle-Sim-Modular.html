@@ -50,7 +50,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            z-index: 999;
+            z-index: 10;
             pointer-events: none;
         }
 
@@ -103,7 +103,10 @@
             justify-content: center;
             align-items: center;
             padding: 20px;
-            z-index: 1;
+            z-index: 5;
+            /* Ensure canvas stays in front of scrollbars and properly centered */
+            overflow: hidden;
+            background: #000;
         }
         canvas {
             border: 1px solid #333;
@@ -758,6 +761,8 @@
             </div>
         </div>
 
+            </div>
+        </div>
 
         <!-- Audio Engine Panel -->
         <div class="tab-panel" id="audio-panel">
