@@ -21,11 +21,13 @@
 ### Granular-Particle-Sim-Modular.html
 | Component | Lines | Purpose |
 |-----------|-------|---------|
-| **CSS Styles** | 7-503 | Complete UI styling including audio controls |
-| **HTML Structure** | 505-680 | DOM layout, control panels, audio panels |
-| **Main JavaScript** | 687-1241 | Canvas setup, particle system, physics, UI generation |
-| **Module Imports** | 683-684 | External JS module loading |
-| **Initialization** | 1224-1241 | Startup sequence |
+| **Tab Interface CSS** | 8-100 | Tabbed interface styling, animations, responsive design |
+| **Classic CSS Styles** | 101-503 | UI component styling (sliders, buttons, matrices) |
+| **HTML Structure** | 620-890 | Tabbed layout with Physics & Audio panels |
+| **Main JavaScript** | 920-1410 | Canvas setup, particle system, physics, UI generation |
+| **Tab System** | 1362-1388 | Tab switching functionality |
+| **Module Imports** | 892-893 | External JS module loading |
+| **Initialization** | 1390-1410 | Startup sequence including tab system |
 
 ### js/audio-system.js  
 | Component | Purpose |
@@ -49,18 +51,22 @@
 ## Critical IDs & Classes
 
 ### Essential IDs
-- `canvas` (507) - Main 2D rendering surface
-- `speciesCount` (549) - Controls number of particle species  
-- `forceMatrix` (562) - Interactive force relationship grid
-- `particleSettings` (553) - Dynamic species parameter controls
-- `speciesAudioControls` (676) - Dynamic audio synthesis panels
-- `masterVolume` (636) - Master audio volume control
-- `canvas-width` (520) - Canvas width control
-- `canvas-height` (527) - Canvas height control
-- `audioInit` (672) - Audio system initialization button
+- `canvas` - Main 2D rendering surface (centered)
+- `physics-panel` - Physics & Simulation tab panel
+- `audio-panel` - Audio Engine tab panel
+- `speciesCount` - Controls number of particle species (Physics tab)
+- `forceMatrix` - Interactive force relationship grid (Physics tab)
+- `particleSettings` - Dynamic species parameter controls (Audio tab)
+- `speciesAudioControls` - Dynamic audio synthesis panels (Audio tab)
+- `masterVolume` - Master audio volume control (Audio tab)
+- `canvas-width` / `canvas-height` - Canvas dimension controls (Physics tab)
+- `audioInit` - Audio system initialization button (Audio tab)
 
 ### Key Classes
-- `.control-panel` - Right sidebar container
+- `.tab-header` - Top navigation with tab buttons
+- `.tab-button` - Individual tab navigation buttons
+- `.tab-panel` - Sliding control panels (Physics/Audio)
+- `.control-panel` - Panel content containers
 - `.control-group` - Major section groupings  
 - `.matrix-grid` - Force relationship visualization
 - `.species-audio-panel` - Per-species audio controls
@@ -92,12 +98,13 @@ Search: "render()" → Temporal priority rendering pipeline
 ### UI & Controls
 **Target File:** `Granular-Particle-Sim-Modular.html`
 ```
-Search: "createParticleSettings" → Dynamic UI generation (line 769)
-Search: "setupSliders" → Control event handlers (line 849)
-Search: "createForceMatrix" → Matrix UI (line 1017)
-Search: "RELATIONSHIP_MATRIX" → Force relationships (line 751)
-Search: "setupDraggableNumbers" → Interactive numeric controls (line 940)
-Search: "updateCanvasSize" → Canvas resizing system (line 1154)
+Search: "initTabSystem" → Tab switching functionality
+Search: "createParticleSettings" → Dynamic UI generation (Audio tab)
+Search: "setupSliders" → Control event handlers  
+Search: "createForceMatrix" → Matrix UI (Physics tab)
+Search: "RELATIONSHIP_MATRIX" → Force relationships
+Search: "setupDraggableNumbers" → Interactive numeric controls
+Search: "updateCanvasSize" → Canvas resizing system
 ```
 
 ### Canvas & Rendering
@@ -156,6 +163,8 @@ Project Root/
 
 ## Code Architecture Notes
 
+- **Tabbed interface**: Modern UI with Physics & Audio separation
+- **Centered canvas**: Prominent simulation display with slide-out controls
 - **Canvas 2D approach**: Single canvas with temporal priority rendering
 - **Component separation**: Clear boundaries between physics/audio/UI/trails
 - **Dynamic UI generation**: Species count drives control creation
@@ -200,3 +209,27 @@ Project Root/
 - **Garbage collection**: Expired trail particles automatically removed
 - **Adaptive rendering**: Canvas fade skipped when all trails disabled
 - **Audio safety**: Trail particles never affect audio engine or physics calculations
+
+## GUI Architecture (Updated 2024)
+
+### Tabbed Interface System
+- **Header navigation**: Fixed top bar with Physics & Audio tabs
+- **Sliding panels**: 400px wide panels that slide in from left edge
+- **Centered canvas**: Simulation always centered with proper z-layering
+- **Responsive design**: Mobile/desktop adaptive layouts
+
+### Tab Structure
+| Tab | Content | Purpose |
+|-----|---------|---------|
+| **Physics & Simulation** | Species config, Force Matrix, Physics settings | Particle behavior control |
+| **Audio Engine** | Species audio config, Master controls, Granular synth | Sound generation control |
+
+### Current Audio Parameter Mappings
+- **X Position** → Stereo panning (-1 to +1)
+- **Y Position** → Filter frequency (logarithmic, 80Hz-8kHz default)
+- **Velocity** → Grain amplitude (with velocity threshold & curve)
+- **Size** → Filter bandwidth (smaller particles = narrower Q)
+- **Trail Length** → Grain duration (2ms-200ms linear mapping)
+
+### Ready for Audio Matrix Implementation
+The tabbed structure provides the perfect foundation for implementing comprehensive audio parameter mapping controls, allowing real-time adjustment of how physics drives audio synthesis.
