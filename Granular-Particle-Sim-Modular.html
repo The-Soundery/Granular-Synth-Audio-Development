@@ -5,18 +5,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Particle Life Simulator - GPU Optimized</title>
     <style>
+        /* Tab Interface Styles */
+        .tab-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #111;
+            border-bottom: 2px solid #333;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .tab-button {
+            background: #222;
+            color: #ccc;
+            border: none;
+            padding: 15px 30px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            min-width: 200px;
+        }
+
+        .tab-button:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .tab-button.active {
+            background: #444;
+            color: #4CAF50;
+            border-bottom-color: #4CAF50;
+        }
+
+        .tab-content {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 999;
+            pointer-events: none;
+        }
+
+        .tab-panel {
+            position: absolute;
+            top: 0;
+            left: -400px;
+            width: 380px;
+            height: 100%;
+            background: #111;
+            border-right: 2px solid #333;
+            transform: translateX(-100%);
+            transition: transform 0.4s ease;
+            pointer-events: auto;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .tab-panel.active {
+            transform: translateX(0);
+        }
+
+        .tab-panel .control-panel {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: none;
+            position: static;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+        }
+
         body {
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: #000;
             color: #fff;
             font-family: Arial, sans-serif;
-            display: flex;
-            gap: 20px;
+            overflow-x: hidden;
         }
         
         .main-content {
-            flex: 1;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            z-index: 1;
         }
         canvas {
             border: 1px solid #333;
@@ -28,16 +115,14 @@
             background: #000;
         }
         .control-panel {
-            width: 350px;
-            background: #111;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
-            height: fit-content;
-            position: sticky;
-            top: 20px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            height: 100%;
+            position: static;
             overflow-y: auto;
-            max-height: 90vh;
         }
         .control-group {
             margin-bottom: 15px;
@@ -240,42 +325,77 @@
             background: #555;
         }
         
-        /* Responsive design */
+        /* Responsive design for tabbed interface */
         @media (max-width: 1024px) {
-            .control-panel {
-                width: 280px;
-                min-width: 280px;
-                padding: 12px;
+            .tab-panel {
+                width: 320px;
+            }
+            .tab-button {
+                min-width: 180px;
+                padding: 12px 20px;
+                font-size: 13px;
             }
         }
         
         @media (max-width: 768px) {
-            body {
+            .tab-header {
                 flex-direction: column;
-            }
-            .control-panel {
-                width: 100%;
-                min-width: auto;
                 height: auto;
-                max-height: 40vh;
-                order: -1;
-                border-left: none;
-                border-bottom: 1px solid #333;
+                position: relative;
             }
+            
+            .tab-button {
+                min-width: auto;
+                width: 100%;
+                padding: 15px;
+                border-bottom: 1px solid #333;
+                border-right: none;
+            }
+            
+            .tab-button.active {
+                border-bottom-color: #4CAF50;
+                border-right-color: transparent;
+            }
+            
+            .tab-content {
+                position: relative;
+                top: 0;
+                height: 40vh;
+            }
+            
+            .tab-panel {
+                width: 100%;
+                left: 0;
+                transform: translateY(-100%);
+                border-right: none;
+                border-bottom: 2px solid #333;
+            }
+            
+            .tab-panel.active {
+                transform: translateY(0);
+            }
+            
             .main-content {
-                min-height: 60vh;
+                position: relative;
+                top: 0;
                 height: 60vh;
+                min-height: 60vh;
             }
         }
         
         @media (max-width: 480px) {
-            .control-panel {
-                max-height: 45vh;
-                padding: 10px;
+            .tab-content {
+                height: 45vh;
             }
+            
             .main-content {
-                min-height: 55vh;
                 height: 55vh;
+                min-height: 55vh;
+            }
+            
+            .tab-button {
+                font-size: 12px;
+                padding: 12px;
             }
         }
         
@@ -503,11 +623,21 @@
     </style>
 </head>
 <body>
-    <div class="main-content">
-        <canvas id="canvas"></canvas>
+    <!-- Tab Navigation Header -->
+    <div class="tab-header">
+        <button class="tab-button active" data-tab="physics">
+            ⚛️ Physics & Simulation
+        </button>
+        <button class="tab-button" data-tab="audio">
+            🎵 Audio Engine
+        </button>
     </div>
 
-    <div class="control-panel">
+    <!-- Tabbed Control Panels -->
+    <div class="tab-content">
+        <!-- Physics & Simulation Panel -->
+        <div class="tab-panel active" id="physics-panel">
+            <div class="control-panel physics-panel">
         <div class="control-group">
             <h3>Simulation Control</h3>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
@@ -531,18 +661,7 @@
         </div>
 
         <div class="control-group">
-            <h3>Performance</h3>
-            <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <div>FPS: <span id="fps-display" style="color: #4CAF50;">60</span></div>
-                <div>Canvas: <span id="canvas-size" style="color: #4CAF50;">1200×800</span></div>
-                <div>Spatial Grid: <span id="grid-info" style="color: #4CAF50;">Active</span></div>
-                <div>Trails: <span style="color: #4CAF50;">Simple Efficient System</span></div>
-                <div>Particles: <span id="total-particles">400</span></div>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <h3>Particle Settings</h3>
+            <h3>Species Configuration</h3>
             <div class="slider-row">
                 <label>Species Count</label>
                 <div class="slider-container">
@@ -550,10 +669,10 @@
                     <span class="value-display" id="speciesCount-value">2</span>
                 </div>
             </div>
-            <div class="particle-settings" id="particleSettings">
-                <!-- Species rows will be generated dynamically -->
-            </div>
-            
+        </div>
+
+        <div class="control-group">
+            <h3>Force Relationships</h3>
             <div class="matrix-container">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0 10px 0;">
                     <h4 style="margin: 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
@@ -578,6 +697,18 @@
                 </div>
             </div>
         </div>
+
+        <div class="control-group">
+            <h3>Performance</h3>
+            <div style="font-size: 12px; color: #888; line-height: 1.4;">
+                <div>FPS: <span id="fps-display" style="color: #4CAF50;">60</span></div>
+                <div>Canvas: <span id="canvas-size" style="color: #4CAF50;">1200×800</span></div>
+                <div>Spatial Grid: <span id="grid-info" style="color: #4CAF50;">Active</span></div>
+                <div>Trails: <span style="color: #4CAF50;">Simple Efficient System</span></div>
+                <div>Particles: <span id="total-particles">400</span></div>
+            </div>
+        </div>
+
 
         <div class="control-group">
             <h3>Physics Settings</h3>
@@ -627,56 +758,79 @@
             </div>
         </div>
 
-        <div class="control-group">
-            <h3>Audio System</h3>
-            <div class="audio-master-controls">
-                <div class="slider-row">
-                    <label>Master Volume</label>
-                    <div class="slider-container">
-                        <input type="range" class="slider" id="masterVolume" min="0" max="1.0" step="0.05" value="0.3">
-                        <span class="value-display" id="masterVolume-value">0.30</span>
-                        <button id="masterMute" class="audio-button">🔇</button>
+
+        <!-- Audio Engine Panel -->
+        <div class="tab-panel" id="audio-panel">
+            <div class="control-panel audio-panel">
+                
+                <div class="control-group">
+                    <h3>Species Audio Configuration</h3>
+                    <div class="particle-settings" id="particleSettings">
+                        <!-- Species rows will be generated dynamically -->
                     </div>
                 </div>
-                <div class="slider-row">
-                    <label>Frequency Range</label>
-                    <div class="freq-range-container">
-                        <div class="freq-range">
-                            <span class="freq-label">Low:</span>
-                            <input type="range" class="slider freq-slider" id="freqLow" min="20" max="500" step="10" value="80">
-                            <span class="value-display" id="freqLow-value">80Hz</span>
+                
+                <div class="control-group">
+                    <h3>Master Audio Controls</h3>
+                    <div class="audio-master-controls">
+                        <div class="slider-row">
+                            <label>Master Volume</label>
+                            <div class="slider-container">
+                                <input type="range" class="slider" id="masterVolume" min="0" max="1.0" step="0.05" value="0.3">
+                                <span class="value-display" id="masterVolume-value">0.30</span>
+                                <button id="masterMute" class="audio-button">🔇</button>
+                            </div>
                         </div>
-                        <div class="freq-range">
-                            <span class="freq-label">High:</span>
-                            <input type="range" class="slider freq-slider" id="freqHigh" min="1000" max="20000" step="100" value="8000">
-                            <span class="value-display" id="freqHigh-value">8000Hz</span>
+                        <div class="slider-row">
+                            <label>Frequency Range</label>
+                            <div class="freq-range-container">
+                                <div class="freq-range">
+                                    <span class="freq-label">Low:</span>
+                                    <input type="range" class="slider freq-slider" id="freqLow" min="20" max="500" step="10" value="80">
+                                    <span class="value-display" id="freqLow-value">80Hz</span>
+                                </div>
+                                <div class="freq-range">
+                                    <span class="freq-label">High:</span>
+                                    <input type="range" class="slider freq-slider" id="freqHigh" min="1000" max="20000" step="100" value="8000">
+                                    <span class="value-display" id="freqHigh-value">8000Hz</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="slider-row">
+                            <label>Velocity x Gain Curve</label>
+                            <div class="slider-container">
+                                <input type="range" class="slider" id="velocityGainCurve" min="0.1" max="3.0" step="0.1" value="1.0">
+                                <span class="value-display" id="velocityGainCurve-value">1.0</span>
+                            </div>
+                        </div>
+                        <div class="slider-row">
+                            <label>Velocity Threshold</label>
+                            <div class="slider-container">
+                                <input type="range" class="slider" id="velocityThreshold" min="0.0" max="1.0" step="0.01" value="0.0">
+                                <span class="value-display" id="velocityThreshold-value">0.00</span>
+                            </div>
+                        </div>
+                        <div class="audio-status">
+                            <span>Audio: </span><span id="audioStatus" style="color: #888;">Initializing...</span>
+                            <button id="audioInit" class="audio-button">🎵 Start Audio</button>
                         </div>
                     </div>
                 </div>
-                <div class="slider-row">
-                    <label>Velocity x Gain Curve</label>
-                    <div class="slider-container">
-                        <input type="range" class="slider" id="velocityGainCurve" min="0.1" max="3.0" step="0.1" value="1.0">
-                        <span class="value-display" id="velocityGainCurve-value">1.0</span>
+                
+                <div class="control-group">
+                    <h3>Individual Species Audio</h3>
+                    <div class="species-audio-container" id="speciesAudioControls">
+                        <!-- Species audio controls will be generated dynamically -->
                     </div>
                 </div>
-                <div class="slider-row">
-                    <label>Velocity Threshold</label>
-                    <div class="slider-container">
-                        <input type="range" class="slider" id="velocityThreshold" min="0.0" max="1.0" step="0.01" value="0.0">
-                        <span class="value-display" id="velocityThreshold-value">0.00</span>
-                    </div>
-                </div>
-                <div class="audio-status">
-                    <span>Audio: </span><span id="audioStatus" style="color: #888;">Initializing...</span>
-                    <button id="audioInit" class="audio-button">🎵 Start Audio</button>
-                </div>
-            </div>
-            
-            <div class="species-audio-container" id="speciesAudioControls">
-                <!-- Species audio controls will be generated dynamically -->
+                
             </div>
         </div>
+    </div>
+
+    <!-- Centered Canvas -->
+    <div class="main-content">
+        <canvas id="canvas"></canvas>
     </div>
 
     <!-- ===== JAVASCRIPT MODULES ===== -->
@@ -1216,6 +1370,33 @@
             document.getElementById('canvas-height').textContent = canvasHeight;
         }
 
+        // ===== TAB SYSTEM =====
+        // Tab switching functionality
+        function initTabSystem() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetTab = button.getAttribute('data-tab');
+                    
+                    // Remove active class from all buttons and panels
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabPanels.forEach(panel => panel.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    
+                    // Show corresponding panel
+                    const targetPanel = document.getElementById(`${targetTab}-panel`);
+                    if (targetPanel) {
+                        targetPanel.classList.add('active');
+                    }
+                });
+            });
+            
+            console.log('🎯 Tab system initialized');
+        }
 
         // ===== INITIALIZATION =====
         // Initialize and start
@@ -1232,6 +1413,9 @@
         
         // Update audio status to show it's ready to initialize
         updateAudioStatus('Click to Start');
+        
+        // Initialize tab system
+        initTabSystem();
         
         animate(); // Use original animation loop from physics-core.js
     </script>
