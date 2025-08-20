@@ -26,10 +26,14 @@ class GranularSynth {
         this.audioContext = audioContext;
         this.masterGain = masterGain;
         
-        // Audio graph
-        this.gainNode = audioContext.createGain();
-        this.gainNode.connect(masterGain);
-        this.gainNode.gain.value = 0.7;
+        // Audio graph (only create if audioContext exists)
+        if (audioContext && masterGain) {
+            this.gainNode = audioContext.createGain();
+            this.gainNode.connect(masterGain);
+            this.gainNode.gain.value = 0.7;
+        } else {
+            this.gainNode = null;
+        }
         
         // Sample buffer and selection
         this.audioBuffer = null;
@@ -63,9 +67,48 @@ class GranularSynth {
         console.log(`🎵 Granular synth created for Species ${String.fromCharCode(65 + speciesIndex)}`);
     }
     
+    // Connect audio graph when context becomes available
+    connectAudioGraph(audioContext, masterGain) {
+        this.audioContext = audioContext;
+        this.masterGain = masterGain;
+        
+        if (!this.gainNode && audioContext && masterGain) {
+            this.gainNode = audioContext.createGain();
+            this.gainNode.connect(masterGain);
+            this.gainNode.gain.value = this.volume || 0.7;
+        }
+    }
+    
     // Load audio sample
     async loadSample(arrayBuffer) {
         try {
+            // If no audio context yet, create a temporary one for display purposes
+            if (!this.audioContext || this.audioContext.state === 'closed') {
+                this.rawAudioData = arrayBuffer;
+                this.fileName = 'Sample loaded (awaiting audio start)';
+                
+                // Create temporary audioContext just for decoding and display
+                try {
+                    const tempContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.audioBuffer = await tempContext.decodeAudioData(arrayBuffer.slice(0)); // Use copy of buffer
+                    await tempContext.close(); // Clean up temporary context
+                    console.log(`🎵 Sample decoded for display for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
+                } catch (tempError) {
+                    console.warn('Could not decode for display:', tempError);
+                }
+                
+                return true;
+            }
+            
+            // Make sure audioContext is in good state before decoding
+            if (this.audioContext.state === 'suspended') {
+                console.warn('AudioContext suspended, storing sample for later decode');
+                this.rawAudioData = arrayBuffer;
+                this.fileName = 'Sample loaded (awaiting audio start)';
+                return true;
+            }
+            
+            // Decode immediately if audio context exists and is running
             this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
             console.log(`🎵 Sample loaded for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
             return true;
@@ -73,6 +116,24 @@ class GranularSynth {
             console.error('Audio decode error:', error);
             return false;
         }
+    }
+    
+    // Decode stored audio data when audio context becomes available
+    async decodeStoredAudio() {
+        if (this.rawAudioData && this.audioContext) {
+            try {
+                // If we already have an audioBuffer from temp decode, re-decode with proper audioContext
+                // This ensures the audioBuffer is compatible with the main audio system
+                this.audioBuffer = await this.audioContext.decodeAudioData(this.rawAudioData);
+                this.rawAudioData = null; // Clear raw data after decoding
+                console.log(`🎵 Re-decoded sample for audio system for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
+                return true;
+            } catch (error) {
+                console.error('Stored audio decode error:', error);
+                return false;
+            }
+        }
+        return false;
     }
     
     // Create and manage audio grain with crossfading
@@ -304,7 +365,7 @@ class GranularSynth {
     
     // Map trail length to grain duration - direct mapping to 2ms-200ms range
     mapTrailLengthToGrainDuration(particle) {
-        const speciesTrailLength = speciesTrailLengths[particle.species] || 0.5;
+        const speciesTrailLength = (typeof speciesTrailLengths !== 'undefined' ? speciesTrailLengths[particle.species] : null) || 0.5;
         
         const minDuration = 0.002; // 2ms
         const maxDuration = 0.2;   // 200ms
@@ -372,16 +433,29 @@ class GranularSynth {
 
 // Initialize Audio System
 async function initAudioSystem() {
+    // Prevent multiple initializations
+    if (isAudioEnabled && audioContext && audioContext.state === 'running') {
+        console.log('🎵 Audio system already initialized');
+        return true;
+    }
+    
     try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Only create new context if one doesn't exist or is closed
+        if (!audioContext || audioContext.state === 'closed') {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } else if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
         
-        // Create master audio graph
-        masterGainNode = audioContext.createGain();
-        compressorNode = audioContext.createDynamicsCompressor();
-        
-        // Setup audio chain: species synths -> master gain -> compressor -> destination
-        masterGainNode.connect(compressorNode);
-        compressorNode.connect(audioContext.destination);
+        // Create master audio graph only if needed
+        if (!masterGainNode || !compressorNode) {
+            masterGainNode = audioContext.createGain();
+            compressorNode = audioContext.createDynamicsCompressor();
+            
+            // Setup audio chain: species synths -> master gain -> compressor -> destination
+            masterGainNode.connect(compressorNode);
+            compressorNode.connect(audioContext.destination);
+        }
         
         // Configure compressor for safety
         compressorNode.threshold.value = -20;
@@ -393,8 +467,32 @@ async function initAudioSystem() {
         // Set master volume
         masterGainNode.gain.value = masterVolume;
         
-        // Initialize species synthesizers (no default samples)
-        initSpeciesSynths();
+        // Connect existing synths to audio context and decode any stored audio
+        for (let i = 0; i < speciesAudioSynths.length; i++) {
+            if (speciesAudioSynths[i]) {
+                speciesAudioSynths[i].connectAudioGraph(audioContext, masterGainNode);
+                // Decode any stored audio data
+                await speciesAudioSynths[i].decodeStoredAudio();
+            }
+        }
+        
+        // Update waveforms for any newly decoded audio
+        for (let i = 0; i < speciesAudioSynths.length; i++) {
+            const synth = speciesAudioSynths[i];
+            if (synth && synth.audioBuffer) {
+                const waveformCanvas = document.getElementById(`waveform${i}`);
+                if (waveformCanvas) {
+                    const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
+                    drawWaveform(synth.audioBuffer, waveformCanvas, currentSpeciesColors[i] || [1,1,1], i);
+                }
+                
+                // Update file name
+                const fileNameElement = document.getElementById(`fileName${i}`);
+                if (fileNameElement && synth.fileName) {
+                    fileNameElement.textContent = synth.fileName;
+                }
+            }
+        }
         
         isAudioEnabled = true;
         updateAudioStatus('Ready');
@@ -407,6 +505,27 @@ async function initAudioSystem() {
         updateAudioStatus('Failed');
         return false;
     }
+}
+
+// Initialize audio UI only (no audio context required)
+function initAudioUI() {
+    speciesAudioSynths = [];
+    
+    // Create UI-only synths (no audioContext)
+    for (let i = 0; i < maxSpecies; i++) {
+        const synth = new GranularSynth(i, null, null);
+        speciesAudioSynths.push(synth);
+    }
+    
+    // Generate species audio UI
+    createSpeciesAudioControls();
+    
+    // Setup draggable numbers for species parameters
+    if (typeof setupDraggableNumbers === 'function') {
+        setTimeout(() => setupDraggableNumbers(), 0);
+    }
+    
+    console.log('🎵 Audio UI initialized (controls ready, audio awaiting start)');
 }
 
 // Initialize species synthesizers (preserves existing audio buffers)
@@ -456,6 +575,11 @@ function initSpeciesSynths() {
     
     // Generate species audio UI
     createSpeciesAudioControls();
+    
+    // Setup draggable numbers for species parameters (call from main script)
+    if (typeof setupDraggableNumbers === 'function') {
+        setTimeout(() => setupDraggableNumbers(), 0);
+    }
 }
 
 // Update audio system with particle data
@@ -629,16 +753,20 @@ async function loadAudioFile(event, speciesIndex) {
         const success = await speciesAudioSynths[speciesIndex].loadSample(arrayBuffer);
         
         if (success) {
-            // Update UI
+            // Update UI with actual file name
             const fileNameElement = document.getElementById(`fileName${speciesIndex}`);
             if (fileNameElement) {
                 fileNameElement.textContent = file.name;
             }
             
-            // Update waveform
+            // Store the actual file name in the synth for proper display
+            speciesAudioSynths[speciesIndex].fileName = file.name;
+            
+            // Update waveform if audioBuffer is available (should be available now even before Start Audio)
             const waveformCanvas = document.getElementById(`waveform${speciesIndex}`);
-            if (waveformCanvas) {
-                drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, waveformCanvas, speciesColors[speciesIndex], speciesIndex);
+            if (waveformCanvas && speciesAudioSynths[speciesIndex].audioBuffer) {
+                const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
+                drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, waveformCanvas, currentSpeciesColors[speciesIndex] || [1,1,1], speciesIndex);
             }
             
             console.log(`🎵 Loaded audio file for Species ${String.fromCharCode(65 + speciesIndex)}: ${file.name}`);
@@ -764,7 +892,7 @@ function setupWaveformSelection(canvas, speciesIndex) {
         
         // Redraw waveform with current selection
         if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
-            drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+            drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, (typeof speciesColors !== 'undefined' ? speciesColors[speciesIndex] : [1,1,1]), speciesIndex);
         }
         
         e.preventDefault();
@@ -798,7 +926,7 @@ function setupWaveformSelection(canvas, speciesIndex) {
         
         // Final redraw
         if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
-            drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+            drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, (typeof speciesColors !== 'undefined' ? speciesColors[speciesIndex] : [1,1,1]), speciesIndex);
         }
         
         e.preventDefault();
@@ -814,7 +942,7 @@ function setupWaveformSelection(canvas, speciesIndex) {
             
             // Redraw without selection
             if (speciesAudioSynths[speciesIndex] && speciesAudioSynths[speciesIndex].audioBuffer) {
-                drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                drawWaveform(speciesAudioSynths[speciesIndex].audioBuffer, canvas, (typeof speciesColors !== 'undefined' ? speciesColors[speciesIndex] : [1,1,1]), speciesIndex);
             }
         }
     });
@@ -829,7 +957,7 @@ function setupWaveformSelection(canvas, speciesIndex) {
             
             // Redraw waveform
             if (synth.audioBuffer) {
-                drawWaveform(synth.audioBuffer, canvas, speciesColors[speciesIndex], speciesIndex);
+                drawWaveform(synth.audioBuffer, canvas, (typeof speciesColors !== 'undefined' ? speciesColors[speciesIndex] : [1,1,1]), speciesIndex);
             }
         }
         e.preventDefault();
@@ -848,319 +976,431 @@ function rgbToHex(rgbArray) {
 }
 
 // ===== UI GENERATION (Audio UI only) =====
-// Create species audio controls UI - defined globally
+// Global variable to track currently selected species for audio controls
+let selectedSpeciesForAudio = 0;
+
+// Create species selector dropdown
+function createSpeciesSelector() {
+    const selector = document.getElementById('speciesSelector');
+    if (!selector) return;
+    
+    selector.innerHTML = '';
+    
+    // Use window variables if available, fallback to defaults
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
+    
+    for (let i = 0; i < currentSpeciesCount; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `Species ${String.fromCharCode(65 + i)}`;
+        option.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
+        if (i === selectedSpeciesForAudio) option.selected = true;
+        selector.appendChild(option);
+    }
+    
+    selector.addEventListener('change', (e) => {
+        selectedSpeciesForAudio = parseInt(e.target.value);
+        createSpeciesAudioControls();
+    });
+}
+
+// Create species audio controls UI - defined globally (now shows single species)
 function createSpeciesAudioControls() {
     const container = document.getElementById('speciesAudioControls');
     if (!container) return;
     
+    // Create species selector first
+    createSpeciesSelector();
+    
     container.innerHTML = '';
     
-    for (let i = 0; i < speciesCount; i++) {
-        const synth = speciesAudioSynths[i];
-        const panel = document.createElement('div');
-        panel.className = 'species-audio-panel';
-        
-        const header = document.createElement('div');
-        header.className = 'species-audio-header';
-        
-        const title = document.createElement('div');
-        title.className = 'species-audio-title';
-        title.style.color = rgbToHex(speciesColors[i]);
-        title.textContent = `Species ${String.fromCharCode(65 + i)}`;
-        
-        const muteButton = document.createElement('button');
-        muteButton.className = 'audio-button';
-        muteButton.id = `speciesMute${i}`;
-        muteButton.textContent = (synth && synth.isMuted) ? '🔇' : '🔊';
-        if (synth && !synth.isMuted) muteButton.classList.add('active');
-        muteButton.addEventListener('click', () => toggleSpeciesMute(i));
-        
-        header.appendChild(title);
-        header.appendChild(muteButton);
-        
-        // File controls
-        const fileControls = document.createElement('div');
-        fileControls.className = 'audio-file-controls';
-        
-        const fileWrapper = document.createElement('div');
-        fileWrapper.className = 'file-input-wrapper';
-        
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.id = `audioFile${i}`;
-        fileInput.accept = '.wav,.mp3,.m4a,.ogg';
-        fileInput.addEventListener('change', (e) => loadAudioFile(e, i));
-        
-        const fileLabel = document.createElement('label');
-        fileLabel.className = 'file-input-label';
-        fileLabel.htmlFor = `audioFile${i}`;
-        fileLabel.textContent = '📁 Load Sample';
-        
-        const fileName = document.createElement('div');
-        fileName.className = 'file-name';
-        fileName.id = `fileName${i}`;
-        fileName.textContent = (synth && synth.fileName) || 'No Sample';
-        
-        fileWrapper.appendChild(fileInput);
-        fileWrapper.appendChild(fileLabel);
-        fileControls.appendChild(fileWrapper);
-        fileControls.appendChild(fileName);
-        
-        // Waveform display
-        const waveformContainer = document.createElement('div');
-        waveformContainer.className = 'waveform-container';
-        
-        const waveformCanvas = document.createElement('canvas');
-        waveformCanvas.className = 'waveform-canvas';
-        waveformCanvas.id = `waveform${i}`;
-        waveformCanvas.width = 280;
-        waveformCanvas.height = 40;
-        
-        waveformContainer.appendChild(waveformCanvas);
-        
-        // Setup waveform selection handlers
-        setupWaveformSelection(waveformCanvas, i);
-        
-        // Volume control
-        const volumeRow = document.createElement('div');
-        volumeRow.className = 'audio-controls-row';
-        
-        const volumeLabel = document.createElement('span');
-        volumeLabel.textContent = 'Volume:';
-        volumeLabel.style.minWidth = '50px';
-        volumeLabel.style.fontSize = '12px';
-        
-        const volumeSlider = document.createElement('input');
-        volumeSlider.type = 'range';
-        volumeSlider.className = 'slider';
-        volumeSlider.id = `speciesVolume${i}`;
-        volumeSlider.min = '0';
-        volumeSlider.max = '1';
-        volumeSlider.step = '0.05';
-        const currentVolume = (synth && typeof synth.volume !== 'undefined') ? synth.volume : 0.7;
-        volumeSlider.value = currentVolume.toString();
-        volumeSlider.style.flex = '1';
-        volumeSlider.addEventListener('input', (e) => setSpeciesVolume(i, parseFloat(e.target.value)));
-        
-        const volumeValue = document.createElement('span');
-        volumeValue.className = 'value-display';
-        volumeValue.id = `speciesVolume${i}-value`;
-        volumeValue.textContent = currentVolume.toFixed(2);
-        
-        volumeRow.appendChild(volumeLabel);
-        volumeRow.appendChild(volumeSlider);
-        volumeRow.appendChild(volumeValue);
-        
-        // Loop Mode Controls
-        const loopRow = document.createElement('div');
-        loopRow.className = 'audio-controls-row';
-        loopRow.style.marginBottom = '8px';
-        
-        const loopLabel = document.createElement('span');
-        loopLabel.textContent = 'Loop:';
-        loopLabel.style.minWidth = '50px';
-        loopLabel.style.fontSize = '12px';
-        loopLabel.style.color = '#ccc';
-        
-        const loopControls = document.createElement('div');
-        loopControls.className = 'loop-controls';
-        
-        // Forward button
-        const forwardBtn = document.createElement('button');
-        forwardBtn.className = 'loop-button';
-        if (!synth || synth.loopMode === 'forward') forwardBtn.classList.add('active');
-        forwardBtn.textContent = '▶';
-        forwardBtn.title = 'Forward Loop';
-        forwardBtn.dataset.species = i;
-        forwardBtn.dataset.loopMode = 'forward';
-        forwardBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'forward'));
-        
-        // Reverse button
-        const reverseBtn = document.createElement('button');
-        reverseBtn.className = 'loop-button';
-        if (synth && synth.loopMode === 'reverse') reverseBtn.classList.add('active');
-        reverseBtn.textContent = '◀';
-        reverseBtn.title = 'Reverse Loop';
-        reverseBtn.dataset.species = i;
-        reverseBtn.dataset.loopMode = 'reverse';
-        reverseBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'reverse'));
-        
-        // Alternate button
-        const alternateBtn = document.createElement('button');
-        alternateBtn.className = 'loop-button';
-        if (synth && synth.loopMode === 'alternate') alternateBtn.classList.add('active');
-        alternateBtn.textContent = '⇄';
-        alternateBtn.title = 'Alternate Loop';
-        alternateBtn.dataset.species = i;
-        alternateBtn.dataset.loopMode = 'alternate';
-        alternateBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'alternate'));
-        
-        loopControls.appendChild(forwardBtn);
-        loopControls.appendChild(reverseBtn);
-        loopControls.appendChild(alternateBtn);
-        
-        loopRow.appendChild(loopLabel);
-        loopRow.appendChild(loopControls);
-        
-        // Advanced Audio Controls
-        // Pitch control
-        const pitchRow = document.createElement('div');
-        pitchRow.className = 'audio-controls-row';
-        
-        const pitchLabel = document.createElement('span');
-        pitchLabel.textContent = 'Pitch:';
-        pitchLabel.style.minWidth = '50px';
-        pitchLabel.style.fontSize = '12px';
-        
-        const pitchSlider = document.createElement('input');
-        pitchSlider.type = 'range';
-        pitchSlider.className = 'slider';
-        pitchSlider.id = `speciesPitch${i}`;
-        pitchSlider.min = '0';
-        pitchSlider.max = '24';
-        pitchSlider.step = '1';
-        const currentPitch = (synth && typeof synth.pitch !== 'undefined') ? synth.pitch : 0;
-        pitchSlider.value = currentPitch.toString();
-        pitchSlider.style.flex = '1';
-        pitchSlider.addEventListener('input', (e) => setSpeciesPitch(i, parseInt(e.target.value)));
-        
-        const pitchValue = document.createElement('span');
-        pitchValue.className = 'value-display';
-        pitchValue.id = `speciesPitch${i}-value`;
-        pitchValue.textContent = `${currentPitch}st`;
-        
-        pitchRow.appendChild(pitchLabel);
-        pitchRow.appendChild(pitchSlider);
-        pitchRow.appendChild(pitchValue);
-        
-        // Detune control
-        const detuneRow = document.createElement('div');
-        detuneRow.className = 'audio-controls-row';
-        
-        const detuneLabel = document.createElement('span');
-        detuneLabel.textContent = 'Detune:';
-        detuneLabel.style.minWidth = '50px';
-        detuneLabel.style.fontSize = '12px';
-        
-        const detuneSlider = document.createElement('input');
-        detuneSlider.type = 'range';
-        detuneSlider.className = 'slider';
-        detuneSlider.id = `speciesDetune${i}`;
-        detuneSlider.min = '0';
-        detuneSlider.max = '50';
-        detuneSlider.step = '1';
-        const currentDetune = (synth && typeof synth.detune !== 'undefined') ? synth.detune : 0;
-        detuneSlider.value = currentDetune.toString();
-        detuneSlider.style.flex = '1';
-        detuneSlider.addEventListener('input', (e) => setSpeciesDetune(i, parseInt(e.target.value)));
-        
-        const detuneValue = document.createElement('span');
-        detuneValue.className = 'value-display';
-        detuneValue.id = `speciesDetune${i}-value`;
-        detuneValue.textContent = `${currentDetune}¢`;
-        
-        detuneRow.appendChild(detuneLabel);
-        detuneRow.appendChild(detuneSlider);
-        detuneRow.appendChild(detuneValue);
-        
-        // Fade Length control
-        const fadeRow = document.createElement('div');
-        fadeRow.className = 'audio-controls-row';
-        
-        const fadeLabel = document.createElement('span');
-        fadeLabel.textContent = 'Fade:';
-        fadeLabel.style.minWidth = '50px';
-        fadeLabel.style.fontSize = '12px';
-        
-        const fadeSlider = document.createElement('input');
-        fadeSlider.type = 'range';
-        fadeSlider.className = 'slider';
-        fadeSlider.id = `speciesFade${i}`;
-        fadeSlider.min = '0.001';
-        fadeSlider.max = '0.02';
-        fadeSlider.step = '0.001';
-        const currentFade = (synth && typeof synth.fadeLength !== 'undefined') ? synth.fadeLength : 0.002;
-        fadeSlider.value = currentFade.toString();
-        fadeSlider.style.flex = '1';
-        fadeSlider.addEventListener('input', (e) => setSpeciesFadeLength(i, parseFloat(e.target.value)));
-        
-        const fadeValue = document.createElement('span');
-        fadeValue.className = 'value-display';
-        fadeValue.id = `speciesFade${i}-value`;
-        fadeValue.textContent = `${Math.round(currentFade * 1000)}ms`;
-        
-        fadeRow.appendChild(fadeLabel);
-        fadeRow.appendChild(fadeSlider);
-        fadeRow.appendChild(fadeValue);
-        
-        // Activity indicators
-        const activityRow = document.createElement('div');
-        activityRow.className = 'audio-controls-row';
-        
-        const activityLabel = document.createElement('span');
-        activityLabel.textContent = 'Grains:';
-        activityLabel.style.minWidth = '50px';
-        activityLabel.style.fontSize = '12px';
-        
-        const grainActivity = document.createElement('div');
-        grainActivity.className = 'grain-activity';
-        grainActivity.id = `grainActivity${i}`;
-        
-        // Create grain indicators
-        for (let j = 0; j < 10; j++) {
-            const indicator = document.createElement('div');
-            indicator.className = 'grain-indicator';
-            grainActivity.appendChild(indicator);
-        }
-        
-        const audioMeter = document.createElement('div');
-        audioMeter.className = 'audio-meter';
-        
-        const meterBar = document.createElement('div');
-        meterBar.className = 'meter-bar';
-        
-        const meterFill = document.createElement('div');
-        meterFill.className = 'meter-fill';
-        meterFill.id = `meterFill${i}`;
-        
-        meterBar.appendChild(meterFill);
-        audioMeter.appendChild(meterBar);
-        
-        const grainCount = document.createElement('span');
-        grainCount.id = `grainCount${i}`;
-        grainCount.textContent = '0/50';
-        grainCount.style.fontSize = '11px';
-        grainCount.style.color = '#888';
-        
-        audioMeter.appendChild(grainCount);
-        
-        activityRow.appendChild(activityLabel);
-        activityRow.appendChild(grainActivity);
-        activityRow.appendChild(audioMeter);
-        
-        // Assemble panel
-        panel.appendChild(header);
-        panel.appendChild(fileControls);
-        panel.appendChild(waveformContainer);
-        panel.appendChild(volumeRow);
-        panel.appendChild(loopRow);
-        panel.appendChild(pitchRow);
-        panel.appendChild(detuneRow);
-        panel.appendChild(fadeRow);
-        panel.appendChild(activityRow);
-        
-        container.appendChild(panel);
-        
-        // Draw waveform if audio buffer exists
-        if (synth && synth.audioBuffer) {
-            drawWaveform(synth.audioBuffer, waveformCanvas, speciesColors[i], i);
-        }
+    // Use window variables if available, fallback to defaults
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
+    const currentParticleCounts = (typeof particleCounts !== 'undefined') ? particleCounts : [200, 200];
+    const currentParticleSizes = (typeof particleSizes !== 'undefined') ? particleSizes : [4, 4];
+    const currentSpeciesTrailLengths = (typeof speciesTrailLengths !== 'undefined') ? speciesTrailLengths : [0.75, 0.65];
+    
+    // Only create panel for selected species
+    const i = selectedSpeciesForAudio;
+    if (i >= currentSpeciesCount) {
+        selectedSpeciesForAudio = 0;
+        return;
+    }
+    
+    const synth = speciesAudioSynths[i];
+    const panel = document.createElement('div');
+    panel.className = 'species-audio-panel';
+    
+    // Add count/size/trail controls at top of panel
+    const speciesParamsHeader = document.createElement('div');
+    speciesParamsHeader.innerHTML = '<h4 style="margin: 0 0 10px 0; color: #ccc; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 5px;">Species Parameters</h4>';
+    
+    const speciesParamsRow = document.createElement('div');
+    speciesParamsRow.className = 'species-row';
+    speciesParamsRow.style.marginBottom = '15px';
+
+    const speciesLabel = document.createElement('div');
+    speciesLabel.className = 'species-label';
+    speciesLabel.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
+    speciesLabel.textContent = `Species ${String.fromCharCode(65 + i)}`;
+
+    // Count parameter
+    const countGroup = document.createElement('div');
+    countGroup.className = 'param-group';
+    
+    const countLabel = document.createElement('span');
+    countLabel.className = 'param-label';
+    countLabel.textContent = 'Count:';
+    
+    const countValue = document.createElement('div');
+    countValue.className = 'draggable-number';
+    countValue.textContent = currentParticleCounts[i] || 200;
+    countValue.id = `count-${i}`;
+    
+    countGroup.appendChild(countLabel);
+    countGroup.appendChild(countValue);
+
+    // Size parameter
+    const sizeGroup = document.createElement('div');
+    sizeGroup.className = 'param-group';
+    
+    const sizeLabel = document.createElement('span');
+    sizeLabel.className = 'param-label';
+    sizeLabel.textContent = 'Size:';
+    
+    const sizeValue = document.createElement('div');
+    sizeValue.className = 'draggable-number';
+    sizeValue.textContent = currentParticleSizes[i] || 4;
+    sizeValue.id = `size-${i}`;
+    
+    sizeGroup.appendChild(sizeLabel);
+    sizeGroup.appendChild(sizeValue);
+
+    // Trail parameter
+    const trailGroup = document.createElement('div');
+    trailGroup.className = 'param-group';
+    
+    const trailLabel = document.createElement('span');
+    trailLabel.className = 'param-label';
+    trailLabel.textContent = 'Trail:';
+    
+    const trailValue = document.createElement('div');
+    trailValue.className = 'draggable-number';
+    trailValue.textContent = (currentSpeciesTrailLengths[i] || 0.75).toFixed(2);
+    trailValue.id = `trail-${i}`;
+    
+    trailGroup.appendChild(trailLabel);
+    trailGroup.appendChild(trailValue);
+
+    speciesParamsRow.appendChild(speciesLabel);
+    speciesParamsRow.appendChild(countGroup);
+    speciesParamsRow.appendChild(sizeGroup);
+    speciesParamsRow.appendChild(trailGroup);
+    
+    const header = document.createElement('div');
+    header.className = 'species-audio-header';
+    header.innerHTML = '<h4 style="margin: 0 0 10px 0; color: #ccc; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 5px;">Audio Controls</h4>';
+    
+    const title = document.createElement('div');
+    title.className = 'species-audio-title';
+    title.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
+    title.textContent = `Species ${String.fromCharCode(65 + i)}`;
+    
+    const muteButton = document.createElement('button');
+    muteButton.className = 'audio-button';
+    muteButton.id = `speciesMute${i}`;
+    muteButton.textContent = (synth && synth.isMuted) ? '🔇' : '🔊';
+    if (synth && !synth.isMuted) muteButton.classList.add('active');
+    muteButton.addEventListener('click', () => toggleSpeciesMute(i));
+    
+    header.appendChild(title);
+    header.appendChild(muteButton);
+    
+    // File controls
+    const fileControls = document.createElement('div');
+    fileControls.className = 'audio-file-controls';
+    
+    const fileWrapper = document.createElement('div');
+    fileWrapper.className = 'file-input-wrapper';
+    
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = `audioFile${i}`;
+    fileInput.accept = '.wav,.mp3,.m4a,.ogg';
+    fileInput.addEventListener('change', (e) => loadAudioFile(e, i));
+    
+    const fileLabel = document.createElement('label');
+    fileLabel.className = 'file-input-label';
+    fileLabel.htmlFor = `audioFile${i}`;
+    fileLabel.textContent = '📁 Load Sample';
+    
+    const fileName = document.createElement('div');
+    fileName.className = 'file-name';
+    fileName.id = `fileName${i}`;
+    fileName.textContent = (synth && synth.fileName) || 'No Sample';
+    
+    fileWrapper.appendChild(fileInput);
+    fileWrapper.appendChild(fileLabel);
+    fileControls.appendChild(fileWrapper);
+    fileControls.appendChild(fileName);
+    
+    // Waveform display
+    const waveformContainer = document.createElement('div');
+    waveformContainer.className = 'waveform-container';
+    
+    const waveformCanvas = document.createElement('canvas');
+    waveformCanvas.className = 'waveform-canvas';
+    waveformCanvas.id = `waveform${i}`;
+    waveformCanvas.width = 280;
+    waveformCanvas.height = 40;
+    
+    waveformContainer.appendChild(waveformCanvas);
+    
+    // Setup waveform selection handlers
+    setupWaveformSelection(waveformCanvas, i);
+    
+    // Volume control
+    const volumeRow = document.createElement('div');
+    volumeRow.className = 'audio-controls-row';
+    
+    const volumeLabel = document.createElement('span');
+    volumeLabel.textContent = 'Volume:';
+    volumeLabel.style.minWidth = '50px';
+    volumeLabel.style.fontSize = '12px';
+    
+    const volumeSlider = document.createElement('input');
+    volumeSlider.type = 'range';
+    volumeSlider.className = 'slider';
+    volumeSlider.id = `speciesVolume${i}`;
+    volumeSlider.min = '0';
+    volumeSlider.max = '1';
+    volumeSlider.step = '0.05';
+    const currentVolume = (synth && typeof synth.volume !== 'undefined') ? synth.volume : 0.7;
+    volumeSlider.value = currentVolume.toString();
+    volumeSlider.style.flex = '1';
+    volumeSlider.addEventListener('input', (e) => setSpeciesVolume(i, parseFloat(e.target.value)));
+    
+    const volumeValue = document.createElement('span');
+    volumeValue.className = 'value-display';
+    volumeValue.id = `speciesVolume${i}-value`;
+    volumeValue.textContent = currentVolume.toFixed(2);
+    
+    volumeRow.appendChild(volumeLabel);
+    volumeRow.appendChild(volumeSlider);
+    volumeRow.appendChild(volumeValue);
+    
+    // Loop Mode Controls
+    const loopRow = document.createElement('div');
+    loopRow.className = 'audio-controls-row';
+    loopRow.style.marginBottom = '8px';
+    
+    const loopLabel = document.createElement('span');
+    loopLabel.textContent = 'Loop:';
+    loopLabel.style.minWidth = '50px';
+    loopLabel.style.fontSize = '12px';
+    loopLabel.style.color = '#ccc';
+    
+    const loopControls = document.createElement('div');
+    loopControls.className = 'loop-controls';
+    
+    // Forward button
+    const forwardBtn = document.createElement('button');
+    forwardBtn.className = 'loop-button';
+    if (!synth || synth.loopMode === 'forward') forwardBtn.classList.add('active');
+    forwardBtn.textContent = '▶';
+    forwardBtn.title = 'Forward Loop';
+    forwardBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'forward'));
+    
+    // Reverse button
+    const reverseBtn = document.createElement('button');
+    reverseBtn.className = 'loop-button';
+    if (synth && synth.loopMode === 'reverse') reverseBtn.classList.add('active');
+    reverseBtn.textContent = '◀';
+    reverseBtn.title = 'Reverse Loop';
+    reverseBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'reverse'));
+    
+    // Alternate button
+    const alternateBtn = document.createElement('button');
+    alternateBtn.className = 'loop-button';
+    if (synth && synth.loopMode === 'alternate') alternateBtn.classList.add('active');
+    alternateBtn.textContent = '⇄';
+    alternateBtn.title = 'Alternate Loop';
+    alternateBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'alternate'));
+    
+    loopControls.appendChild(forwardBtn);
+    loopControls.appendChild(reverseBtn);
+    loopControls.appendChild(alternateBtn);
+    
+    loopRow.appendChild(loopLabel);
+    loopRow.appendChild(loopControls);
+    
+    // Pitch control
+    const pitchRow = document.createElement('div');
+    pitchRow.className = 'audio-controls-row';
+    
+    const pitchLabel = document.createElement('span');
+    pitchLabel.textContent = 'Pitch:';
+    pitchLabel.style.minWidth = '50px';
+    pitchLabel.style.fontSize = '12px';
+    
+    const pitchSlider = document.createElement('input');
+    pitchSlider.type = 'range';
+    pitchSlider.className = 'slider';
+    pitchSlider.id = `speciesPitch${i}`;
+    pitchSlider.min = '0';
+    pitchSlider.max = '24';
+    pitchSlider.step = '1';
+    const currentPitch = (synth && typeof synth.pitch !== 'undefined') ? synth.pitch : 0;
+    pitchSlider.value = currentPitch.toString();
+    pitchSlider.style.flex = '1';
+    pitchSlider.addEventListener('input', (e) => setSpeciesPitch(i, parseInt(e.target.value)));
+    
+    const pitchValue = document.createElement('span');
+    pitchValue.className = 'value-display';
+    pitchValue.id = `speciesPitch${i}-value`;
+    pitchValue.textContent = `${currentPitch}st`;
+    
+    pitchRow.appendChild(pitchLabel);
+    pitchRow.appendChild(pitchSlider);
+    pitchRow.appendChild(pitchValue);
+    
+    // Detune control
+    const detuneRow = document.createElement('div');
+    detuneRow.className = 'audio-controls-row';
+    
+    const detuneLabel = document.createElement('span');
+    detuneLabel.textContent = 'Detune:';
+    detuneLabel.style.minWidth = '50px';
+    detuneLabel.style.fontSize = '12px';
+    
+    const detuneSlider = document.createElement('input');
+    detuneSlider.type = 'range';
+    detuneSlider.className = 'slider';
+    detuneSlider.id = `speciesDetune${i}`;
+    detuneSlider.min = '0';
+    detuneSlider.max = '50';
+    detuneSlider.step = '1';
+    const currentDetune = (synth && typeof synth.detune !== 'undefined') ? synth.detune : 0;
+    detuneSlider.value = currentDetune.toString();
+    detuneSlider.style.flex = '1';
+    detuneSlider.addEventListener('input', (e) => setSpeciesDetune(i, parseInt(e.target.value)));
+    
+    const detuneValue = document.createElement('span');
+    detuneValue.className = 'value-display';
+    detuneValue.id = `speciesDetune${i}-value`;
+    detuneValue.textContent = `${currentDetune}¢`;
+    
+    detuneRow.appendChild(detuneLabel);
+    detuneRow.appendChild(detuneSlider);
+    detuneRow.appendChild(detuneValue);
+    
+    // Fade Length control
+    const fadeRow = document.createElement('div');
+    fadeRow.className = 'audio-controls-row';
+    
+    const fadeLabel = document.createElement('span');
+    fadeLabel.textContent = 'Fade:';
+    fadeLabel.style.minWidth = '50px';
+    fadeLabel.style.fontSize = '12px';
+    
+    const fadeSlider = document.createElement('input');
+    fadeSlider.type = 'range';
+    fadeSlider.className = 'slider';
+    fadeSlider.id = `speciesFade${i}`;
+    fadeSlider.min = '0.001';
+    fadeSlider.max = '0.02';
+    fadeSlider.step = '0.001';
+    const currentFade = (synth && typeof synth.fadeLength !== 'undefined') ? synth.fadeLength : 0.002;
+    fadeSlider.value = currentFade.toString();
+    fadeSlider.style.flex = '1';
+    fadeSlider.addEventListener('input', (e) => setSpeciesFadeLength(i, parseFloat(e.target.value)));
+    
+    const fadeValue = document.createElement('span');
+    fadeValue.className = 'value-display';
+    fadeValue.id = `speciesFade${i}-value`;
+    fadeValue.textContent = `${Math.round(currentFade * 1000)}ms`;
+    
+    fadeRow.appendChild(fadeLabel);
+    fadeRow.appendChild(fadeSlider);
+    fadeRow.appendChild(fadeValue);
+    
+    // Activity indicators
+    const activityRow = document.createElement('div');
+    activityRow.className = 'audio-controls-row';
+    
+    const activityLabel = document.createElement('span');
+    activityLabel.textContent = 'Grains:';
+    activityLabel.style.minWidth = '50px';
+    activityLabel.style.fontSize = '12px';
+    
+    const grainActivity = document.createElement('div');
+    grainActivity.className = 'grain-activity';
+    grainActivity.id = `grainActivity${i}`;
+    
+    // Create grain indicators
+    for (let j = 0; j < 10; j++) {
+        const indicator = document.createElement('div');
+        indicator.className = 'grain-indicator';
+        grainActivity.appendChild(indicator);
+    }
+    
+    const audioMeter = document.createElement('div');
+    audioMeter.className = 'audio-meter';
+    
+    const meterBar = document.createElement('div');
+    meterBar.className = 'meter-bar';
+    
+    const meterFill = document.createElement('div');
+    meterFill.className = 'meter-fill';
+    meterFill.id = `meterFill${i}`;
+    
+    meterBar.appendChild(meterFill);
+    audioMeter.appendChild(meterBar);
+    
+    const grainCount = document.createElement('span');
+    grainCount.id = `grainCount${i}`;
+    grainCount.textContent = '0/50';
+    grainCount.style.fontSize = '11px';
+    grainCount.style.color = '#888';
+    
+    audioMeter.appendChild(grainCount);
+    
+    activityRow.appendChild(activityLabel);
+    activityRow.appendChild(grainActivity);
+    activityRow.appendChild(audioMeter);
+    
+    // Assemble panel
+    panel.appendChild(speciesParamsHeader);
+    panel.appendChild(speciesParamsRow);
+    panel.appendChild(header);
+    panel.appendChild(fileControls);
+    panel.appendChild(waveformContainer);
+    panel.appendChild(volumeRow);
+    panel.appendChild(loopRow);
+    panel.appendChild(pitchRow);
+    panel.appendChild(detuneRow);
+    panel.appendChild(fadeRow);
+    panel.appendChild(activityRow);
+    
+    container.appendChild(panel);
+    
+    // Draw waveform if audio buffer exists
+    if (synth && synth.audioBuffer) {
+        drawWaveform(synth.audioBuffer, waveformCanvas, currentSpeciesColors[i] || [1,1,1], i);
+    }
+    
+    // Setup draggable numbers for the species parameters (call from main script if available)
+    if (typeof setupDraggableNumbers === 'function') {
+        setTimeout(() => setupDraggableNumbers(), 0);
     }
 }
 
 // Update audio UI indicators - defined globally
 function updateAudioUI() {
-    for (let i = 0; i < speciesCount; i++) {
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    for (let i = 0; i < currentSpeciesCount; i++) {
         if (!speciesAudioSynths[i]) continue;
         
         const synth = speciesAudioSynths[i];
@@ -1189,3 +1429,4 @@ function updateAudioUI() {
         }
     }
 }
+

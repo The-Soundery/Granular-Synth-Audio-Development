@@ -773,13 +773,6 @@
             <div class="control-panel audio-panel">
                 
                 <div class="control-group">
-                    <h3>Species Audio Configuration</h3>
-                    <div class="particle-settings" id="particleSettings">
-                        <!-- Species rows will be generated dynamically -->
-                    </div>
-                </div>
-                
-                <div class="control-group">
                     <h3>Master Audio Controls</h3>
                     <div class="audio-master-controls">
                         <div class="slider-row">
@@ -828,6 +821,14 @@
                 
                 <div class="control-group">
                     <h3>Individual Species Audio</h3>
+                    <div class="slider-row">
+                        <label>Select Species:</label>
+                        <div class="slider-container">
+                            <select id="speciesSelector" style="flex: 1; background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 3px; cursor: pointer;">
+                                <!-- Options will be generated dynamically -->
+                            </select>
+                        </div>
+                    </div>
                     <div class="species-audio-container" id="speciesAudioControls">
                         <!-- Species audio controls will be generated dynamically -->
                     </div>
@@ -891,8 +892,8 @@
 
         // Configurable parameters
         let particleSizes = [4, 4, 4, 4, 4, 4, 4, 4];
-        let particleCounts = [200, 200, 100, 100, 100, 100, 100, 100];
-        let speciesTrailLengths = [0.75, 0.65, 0.70, 0.70, 0.70, 0.70, 0.70, 0.70]; // Individual trail fade per species (0.0-0.99 range)
+        let particleCounts = [50, 50, 50, 50, 50, 50, 50, 50];
+        let speciesTrailLengths = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; // Individual trail fade per species (0.0-0.99 range)
         let FRICTION = 0.95;
         let MAX_FORCE_DISTANCE = 60;
         let SIMULATION_SPEED = 1.0;
@@ -927,76 +928,6 @@
 
 
         // ===== UI GENERATION =====
-        // Create particle settings UI
-        function createParticleSettings() {
-            const container = document.getElementById('particleSettings');
-            container.innerHTML = '';
-
-            for (let i = 0; i < speciesCount; i++) {
-                const row = document.createElement('div');
-                row.className = 'species-row';
-
-                const label = document.createElement('div');
-                label.className = 'species-label';
-                label.style.color = rgbToHex(speciesColors[i]);
-                label.textContent = `Species ${String.fromCharCode(65 + i)}`;
-
-                // Count parameter
-                const countGroup = document.createElement('div');
-                countGroup.className = 'param-group';
-                
-                const countLabel = document.createElement('span');
-                countLabel.className = 'param-label';
-                countLabel.textContent = 'Count:';
-                
-                const countValue = document.createElement('div');
-                countValue.className = 'draggable-number';
-                countValue.textContent = particleCounts[i];
-                countValue.id = `count-${i}`;
-                
-                countGroup.appendChild(countLabel);
-                countGroup.appendChild(countValue);
-
-                // Size parameter
-                const sizeGroup = document.createElement('div');
-                sizeGroup.className = 'param-group';
-                
-                const sizeLabel = document.createElement('span');
-                sizeLabel.className = 'param-label';
-                sizeLabel.textContent = 'Size:';
-                
-                const sizeValue = document.createElement('div');
-                sizeValue.className = 'draggable-number';
-                sizeValue.textContent = particleSizes[i];
-                sizeValue.id = `size-${i}`;
-                
-                sizeGroup.appendChild(sizeLabel);
-                sizeGroup.appendChild(sizeValue);
-
-                // Trail parameter
-                const trailGroup = document.createElement('div');
-                trailGroup.className = 'param-group';
-                
-                const trailLabel = document.createElement('span');
-                trailLabel.className = 'param-label';
-                trailLabel.textContent = 'Trail:';
-                
-                const trailValue = document.createElement('div');
-                trailValue.className = 'draggable-number';
-                trailValue.textContent = speciesTrailLengths[i].toFixed(2);
-                trailValue.id = `trail-${i}`;
-                
-                trailGroup.appendChild(trailLabel);
-                trailGroup.appendChild(trailValue);
-
-                row.appendChild(label);
-                row.appendChild(countGroup);
-                row.appendChild(sizeGroup);
-                row.appendChild(trailGroup);
-
-                container.appendChild(row);
-            }
-        }
 
         // RGB to Hex conversion
         function rgbToHex(rgbArray) {
@@ -1015,14 +946,16 @@
                 document.getElementById('speciesCount-value').textContent = speciesCount;
                 
                 // Regenerate UI and adjust particles
-                createParticleSettings();
                 createForceMatrix();
                 setupDraggableNumbers();
                 adjustParticleCounts();
                 
                 // Regenerate audio controls if audio is initialized
                 if (isAudioEnabled && speciesAudioSynths.length > 0) {
-                    initSpeciesSynths();
+                    // Just regenerate the UI, don't recreate synths
+                    createSpeciesAudioControls();
+                    // Setup draggable numbers for new audio controls
+                    setTimeout(() => setupDraggableNumbers(), 0);
                 }
             });
 
@@ -1091,6 +1024,7 @@
             });
 
             document.getElementById('masterMute').addEventListener('click', toggleMasterMute);
+            
             document.getElementById('audioInit').addEventListener('click', () => {
                 initAudioSystem();
             });
@@ -1411,7 +1345,6 @@
         // Initialize and start
         initCanvas(); // Initialize canvas to default size
         ensureMatrixSize();
-        createParticleSettings();
         createForceMatrix();
         setupSliders();
         setupDraggableNumbers();
@@ -1420,7 +1353,8 @@
         initTrailSystem(); // Initialize colorful trail system
         initParticles();
         
-        // Update audio status to show it's ready to initialize
+        // Initialize audio UI (controls visible immediately)
+        initAudioUI();
         updateAudioStatus('Click to Start');
         
         // Initialize tab system
