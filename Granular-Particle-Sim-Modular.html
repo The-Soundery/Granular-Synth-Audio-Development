@@ -58,7 +58,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 380px;
+            width: 400px;
             height: 100%;
             background: #111;
             border-right: 2px solid #333;
@@ -66,10 +66,13 @@
             transition: transform 0.4s ease;
             pointer-events: auto;
             box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            z-index: 1;
         }
 
         .tab-panel.active {
             transform: translateX(0);
+            z-index: 2;
         }
 
         .tab-panel .control-panel {
@@ -81,7 +84,8 @@
             position: static;
             border: none;
             border-radius: 0;
-            background: transparent;
+            background: #111;
+            box-sizing: border-box;
         }
 
         body {
