@@ -646,7 +646,11 @@
         </div>
     </div>
 
+    <!-- ===== JAVASCRIPT SECTION ===== -->
+    <script src="js/audio-system.js"></script>
+    <script src="js/physics-core.js"></script>
     <script>
+        // ===== WEBGL SETUP & RENDERING (lines ~650-960) =====
         // WebGL setup and particle system
         const canvas = document.getElementById('canvas');
         const gl = canvas.getContext('webgl');
@@ -958,17 +962,7 @@
         const sizeBuffer = gl.createBuffer();
         const colorBuffer = gl.createBuffer();
 
-        // Audio System Setup
-        let audioContext = null;
-        let masterGainNode = null;
-        let compressorNode = null;
-        let isAudioEnabled = false;
-        let isMasterMuted = false;
-        let masterVolume = 0.3;
-        let frequencyRange = { low: 80, high: 8000 };
-        
-        // Species audio synthesizers
-        let speciesAudioSynths = [];
+        // Audio system variables (moved to audio-system.js)
         
         // Removed default samples feature
 
@@ -1766,34 +1760,8 @@
             return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
         }
 
-        // Create species audio controls UI - defined globally
-        function createSpeciesAudioControls() {
-            const container = document.getElementById('speciesAudioControls');
-            if (!container) return;
-            
-            container.innerHTML = '';
-            
-            for (let i = 0; i < speciesCount; i++) {
-                const synth = speciesAudioSynths[i];
-                const panel = document.createElement('div');
-                panel.className = 'species-audio-panel';
-                
-                const header = document.createElement('div');
-                header.className = 'species-audio-header';
-                
-                const title = document.createElement('div');
-                title.className = 'species-audio-title';
-                title.style.color = rgbToHex(speciesColors[i]);
-                title.textContent = `Species ${String.fromCharCode(65 + i)}`;
-                
-                const muteButton = document.createElement('button');
-                muteButton.className = 'audio-button';
-                muteButton.id = `speciesMute${i}`;
-                muteButton.textContent = (synth && synth.isMuted) ? '🔇' : '🔊';
-                if (synth && !synth.isMuted) muteButton.classList.add('active');
-                muteButton.addEventListener('click', () => toggleSpeciesMute(i));
-                
-                header.appendChild(title);
+        // ===== UI GENERATION (lines ~1800-2141) =====
+        // Audio controls UI moved to audio-system.js
                 header.appendChild(muteButton);
                 
                 // File controls
@@ -2139,8 +2107,7 @@
             }
         }
 
-        // Spatial Grid Class for O(N) force calculation optimization
-        class SpatialGrid {
+        // Spatial grid and physics classes moved to physics-core.js
             constructor(canvasWidth, canvasHeight, cellSize) {
                 this.canvasWidth = canvasWidth;
                 this.canvasHeight = canvasHeight;
@@ -2300,8 +2267,7 @@
             }
         }
 
-        // Particle class with optimized trail system
-        class Particle {
+        // Particle class and physics core moved to physics-core.js
             constructor(species) {
                 this.species = species;
                 this.x = Math.random() * canvasWidth;
@@ -3031,6 +2997,7 @@
         // Update trail preview in UI - REMOVED
         // function updateTrailPreview(speciesIndex) removed
 
+        // ===== CONTROL SYSTEM & FORCE MATRIX (lines ~3000-3400) =====
         // Slider event handlers
         function setupSliders() {
             // Species count slider
@@ -3519,6 +3486,7 @@
             }
         }
 
+        // ===== INITIALIZATION (lines ~3522-3538) =====
         // Initialize and start
         setupResizeHandling(); // Setup responsive canvas sizing
         ensureMatrixSize();

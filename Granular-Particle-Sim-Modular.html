@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Life Simulator - GPU Optimized</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .main-content {
+            flex: 1;
+        }
+        canvas {
+            border: 1px solid #333;
+            display: block;
+        }
+        #canvas {
+            position: relative;
+            z-index: 2;
+            background: #000;
+        }
+        .control-panel {
+            width: 350px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #fff;
+            font-size: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+        .slider-row {
+            margin-bottom: 10px;
+        }
+        .slider-row label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        .checkbox-label {
+            display: flex !important;
+            align-items: center;
+        }
+        .slider-row label input[type="checkbox"] {
+            margin-right: 8px;
+            transform: scale(1.2);
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+            border: none;
+        }
+        .value-display {
+            min-width: 50px;
+            text-align: right;
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+        }
+        .species-a { color: #ff4444; }
+        .species-b { color: #4444ff; }
+        
+        /* Particle Settings Styles */
+        .particle-settings {
+            margin-bottom: 15px;
+        }
+        .species-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .species-label {
+            min-width: 70px;
+            font-weight: bold;
+        }
+        .param-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .param-label {
+            color: #ccc;
+            font-size: 12px;
+        }
+        .draggable-number {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: ns-resize;
+            user-select: none;
+            min-width: 40px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .draggable-number:hover {
+            background: #444;
+            border-color: #666;
+        }
+        .draggable-number.dragging {
+            background: #555;
+            border-color: #888;
+        }
+        
+        /* Force Matrix Styles */
+        .matrix-container {
+            margin-top: 15px;
+        }
+        .matrix-grid {
+            display: grid;
+            gap: 0px;
+            background: #555;
+            border: 2px solid #666;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .matrix-header {
+            background: #222;
+            padding: 6px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            border: 2px solid #444;
+        }
+        .species-color-picker {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #666;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .matrix-cell {
+            background: #444;
+            padding: 0;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: ns-resize;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: background-color 0.1s ease;
+            border: 2px solid #333;
+        }
+        .matrix-cell:hover {
+            border: 2px solid #888;
+        }
+        .matrix-cell.dragging {
+            border: 2px solid #fff;
+        }
+        .force-legend {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 10px;
+            color: #888;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            background: #333;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #555;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 1024px) {
+            .control-panel {
+                width: 280px;
+                min-width: 280px;
+                padding: 12px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            .control-panel {
+                width: 100%;
+                min-width: auto;
+                height: auto;
+                max-height: 40vh;
+                order: -1;
+                border-left: none;
+                border-bottom: 1px solid #333;
+            }
+            .main-content {
+                min-height: 60vh;
+                height: 60vh;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .control-panel {
+                max-height: 45vh;
+                padding: 10px;
+            }
+            .main-content {
+                min-height: 55vh;
+                height: 55vh;
+            }
+        }
+        
+        /* Audio Control Styles */
+        .audio-master-controls {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            border-radius: 6px;
+        }
+        
+        .audio-button {
+            background: #444;
+            color: #fff;
+            border: none;
+            padding: 4px 8px;
+            margin-left: 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+            min-width: 35px;
+        }
+        
+        .audio-button:hover {
+            background: #666;
+        }
+        
+        .audio-button.active {
+            background: #4CAF50;
+        }
+        
+        .loop-controls {
+            display: flex;
+            gap: 4px;
+            flex: 1;
+        }
+        
+        .loop-button {
+            min-width: 32px;
+            height: 24px;
+            padding: 2px 6px;
+            font-size: 12px;
+            background: #444;
+            color: #fff;
+            border: 1px solid #666;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loop-button:hover {
+            background: #555;
+            border-color: #777;
+        }
+        
+        .loop-button.active {
+            background: #4CAF50;
+            color: #000;
+            border-color: #4CAF50;
+        }
+        
+        .freq-range-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .freq-range {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .freq-label {
+            min-width: 35px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .freq-slider {
+            flex: 1;
+        }
+        
+        .audio-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        
+        .species-audio-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .species-audio-panel {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 6px;
+        }
+        
+        .species-audio-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .species-audio-title {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .audio-file-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-input-label {
+            background: #333;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            border: 1px solid #555;
+        }
+        
+        .file-input-label:hover {
+            background: #444;
+        }
+        
+        .file-name {
+            flex: 1;
+            font-size: 11px;
+            color: #888;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .waveform-container {
+            width: 100%;
+            height: 40px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 3px;
+            margin-bottom: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .audio-controls-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        
+        .grain-activity {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+        
+        .grain-indicator {
+            width: 8px;
+            height: 8px;
+            background: #333;
+            border-radius: 50%;
+            transition: background-color 0.1s ease;
+        }
+        
+        .grain-indicator.active {
+            background: #4CAF50;
+        }
+        
+        .audio-meter {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+        }
+        
+        .meter-bar {
+            width: 50px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .meter-fill {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50, #FFC107, #FF5722);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <h3>Simulation Control</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button onclick="resetSimulation()" style="flex: 1;">Reset Simulation</button>
+                <button onclick="togglePause()" style="flex: 1;">Pause/Resume</button>
+            </div>
+            <div class="slider-row">
+                <label>Canvas Width</label>
+                <div class="slider-container">
+                    <span class="draggable-number" id="canvas-width">1200</span>
+                    <span style="color: #888; font-size: 12px;">px</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Canvas Height</label>
+                <div class="slider-container">
+                    <span class="draggable-number" id="canvas-height">800</span>
+                    <span style="color: #888; font-size: 12px;">px</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Performance</h3>
+            <div style="font-size: 12px; color: #888; line-height: 1.4;">
+                <div>FPS: <span id="fps-display" style="color: #4CAF50;">60</span></div>
+                <div>Canvas: <span id="canvas-size" style="color: #4CAF50;">1200×800</span></div>
+                <div>Spatial Grid: <span id="grid-info" style="color: #4CAF50;">Active</span></div>
+                <div>Trails: <span style="color: #4CAF50;">Simple Efficient System</span></div>
+                <div>Particles: <span id="total-particles">400</span></div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Particle Settings</h3>
+            <div class="slider-row">
+                <label>Species Count</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="speciesCount" min="2" max="8" step="1" value="2">
+                    <span class="value-display" id="speciesCount-value">2</span>
+                </div>
+            </div>
+            <div class="particle-settings" id="particleSettings">
+                <!-- Species rows will be generated dynamically -->
+            </div>
+            
+            <div class="matrix-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0 10px 0;">
+                    <h4 style="margin: 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
+                    <button id="randomizeMatrix" class="audio-button" style="font-size: 12px; padding: 4px 8px;">🎲 Randomize</button>
+                </div>
+                <div class="matrix-grid" id="forceMatrix">
+                    <!-- Matrix will be generated dynamically -->
+                </div>
+                <div class="force-legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ff4444;"></div>
+                        <span>Repulsion (-1.0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #666;"></div>
+                        <span>Neutral (0.0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #44ff44;"></div>
+                        <span>Attraction (+1.0)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Physics Settings</h3>
+            <div class="slider-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="toroidalSpace" checked style="margin-right: 8px;">
+                    Toroidal Space (Edge Wrapping)
+                </label>
+            </div>
+            <div class="slider-row">
+                <label>Friction</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="friction" min="0.85" max="1.0" step="0.01" value="0.95">
+                    <span class="value-display" id="friction-value">0.95</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Force Radius</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="forceRadius" min="20" max="200" step="10" value="60">
+                    <span class="value-display" id="forceRadius-value">60</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Simulation Speed</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="simSpeed" min="0.1" max="2.0" step="0.1" value="1.0">
+                    <span class="value-display" id="simSpeed-value">1.0</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Gravity Strength</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="gravityStrength" min="0.0" max="10.0" step="0.05" value="0.0">
+                    <span class="value-display" id="gravityStrength-value">0.0</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label>Wall Bounce Damping</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="bounceDamping" min="0.5" max="1.5" step="0.1" value="0.8">
+                    <span class="value-display" id="bounceDamping-value">0.8</span>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-top: 8px;">
+                Click and hold on simulation to create gravity pull
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Audio System</h3>
+            <div class="audio-master-controls">
+                <div class="slider-row">
+                    <label>Master Volume</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="masterVolume" min="0" max="1.0" step="0.05" value="0.3">
+                        <span class="value-display" id="masterVolume-value">0.30</span>
+                        <button id="masterMute" class="audio-button">🔇</button>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <label>Frequency Range</label>
+                    <div class="freq-range-container">
+                        <div class="freq-range">
+                            <span class="freq-label">Low:</span>
+                            <input type="range" class="slider freq-slider" id="freqLow" min="20" max="500" step="10" value="80">
+                            <span class="value-display" id="freqLow-value">80Hz</span>
+                        </div>
+                        <div class="freq-range">
+                            <span class="freq-label">High:</span>
+                            <input type="range" class="slider freq-slider" id="freqHigh" min="1000" max="20000" step="100" value="8000">
+                            <span class="value-display" id="freqHigh-value">8000Hz</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <label>Velocity x Gain Curve</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="velocityGainCurve" min="0.1" max="3.0" step="0.1" value="1.0">
+                        <span class="value-display" id="velocityGainCurve-value">1.0</span>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <label>Velocity Threshold</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="velocityThreshold" min="0.0" max="1.0" step="0.01" value="0.0">
+                        <span class="value-display" id="velocityThreshold-value">0.00</span>
+                    </div>
+                </div>
+                <div class="audio-status">
+                    <span>Audio: </span><span id="audioStatus" style="color: #888;">Initializing...</span>
+                    <button id="audioInit" class="audio-button">🎵 Start Audio</button>
+                </div>
+            </div>
+            
+            <div class="species-audio-container" id="speciesAudioControls">
+                <!-- Species audio controls will be generated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== JAVASCRIPT MODULES ===== -->
+    <script src="js/audio-system.js"></script>
+    <script src="js/physics-core.js"></script>
+    
+    <!-- ===== MAIN APPLICATION ===== -->
+    <script>
+        // ===== CANVAS SETUP & RENDERING =====
+        // 2D Canvas setup for motion blur particle system
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+            alert('Canvas 2D not supported!');
+        }
+
+        // Canvas sizing system - using manual controls only
+        let canvasWidth = 1200;
+        let canvasHeight = 800;
+
+        // Initialize canvas to default size
+        function initCanvas() {
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            console.log(`🖥️ Canvas initialized to ${canvasWidth}×${canvasHeight}`);
+        }
+
+        // Particle data
+        let particles = [];
+        let isPaused = false;
+        let spatialGrid; // Spatial partitioning system
+
+        
+
+        // Species management
+        let speciesCount = 2;
+        let maxSpecies = 8;
+        let speciesColors = [
+            [1.0, 0.27, 0.27], // Red
+            [0.27, 0.27, 1.0], // Blue
+            [0.27, 1.0, 0.27], // Green
+            [1.0, 1.0, 0.27],  // Yellow
+            [1.0, 0.27, 1.0],  // Magenta
+            [0.27, 1.0, 1.0],  // Cyan
+            [1.0, 0.5, 0.0],   // Orange
+            [0.5, 0.0, 1.0]    // Purple
+        ];
+
+        // Configurable parameters
+        let particleSizes = [4, 4, 4, 4, 4, 4, 4, 4];
+        let particleCounts = [200, 200, 100, 100, 100, 100, 100, 100];
+        let speciesTrailLengths = [0.75, 0.65, 0.70, 0.70, 0.70, 0.70, 0.70, 0.70]; // Individual trail fade per species (0.0-0.99 range)
+        let FRICTION = 0.95;
+        let MAX_FORCE_DISTANCE = 60;
+        let SIMULATION_SPEED = 1.0;
+        let TOROIDAL_SPACE = true; // Toggle for edge wrapping
+        let GRAVITY_STRENGTH = 0.0; // Gravity pull strength
+        let BOUNCE_DAMPING = 0.8; // Wall bounce damping factor (0.5-1.5)
+        
+        // Gravity system
+        let gravityPoint = { x: 0, y: 0, active: false };
+        let isMouseDown = false;
+
+        // Species constants
+        const SPECIES = {
+            A: 0, // Red
+            B: 1  // Blue
+        };
+
+        // Relationship matrix (force strengths) - now dynamic and expandable
+        let RELATIONSHIP_MATRIX = [
+            [-0.3, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],   // A relationships
+            [-0.5, -0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  // B relationships
+            [0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, 0.0],   // C relationships
+            [0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0],   // D relationships
+            [0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0],   // E relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0],   // F relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0],   // G relationships
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1]    // H relationships
+        ];
+
+        // Force parameters
+        const MAX_SPEED = 3;
+
+
+        // ===== UI GENERATION =====
+        // Create particle settings UI
+        function createParticleSettings() {
+            const container = document.getElementById('particleSettings');
+            container.innerHTML = '';
+
+            for (let i = 0; i < speciesCount; i++) {
+                const row = document.createElement('div');
+                row.className = 'species-row';
+
+                const label = document.createElement('div');
+                label.className = 'species-label';
+                label.style.color = rgbToHex(speciesColors[i]);
+                label.textContent = `Species ${String.fromCharCode(65 + i)}`;
+
+                // Count parameter
+                const countGroup = document.createElement('div');
+                countGroup.className = 'param-group';
+                
+                const countLabel = document.createElement('span');
+                countLabel.className = 'param-label';
+                countLabel.textContent = 'Count:';
+                
+                const countValue = document.createElement('div');
+                countValue.className = 'draggable-number';
+                countValue.textContent = particleCounts[i];
+                countValue.id = `count-${i}`;
+                
+                countGroup.appendChild(countLabel);
+                countGroup.appendChild(countValue);
+
+                // Size parameter
+                const sizeGroup = document.createElement('div');
+                sizeGroup.className = 'param-group';
+                
+                const sizeLabel = document.createElement('span');
+                sizeLabel.className = 'param-label';
+                sizeLabel.textContent = 'Size:';
+                
+                const sizeValue = document.createElement('div');
+                sizeValue.className = 'draggable-number';
+                sizeValue.textContent = particleSizes[i];
+                sizeValue.id = `size-${i}`;
+                
+                sizeGroup.appendChild(sizeLabel);
+                sizeGroup.appendChild(sizeValue);
+
+                // Trail parameter
+                const trailGroup = document.createElement('div');
+                trailGroup.className = 'param-group';
+                
+                const trailLabel = document.createElement('span');
+                trailLabel.className = 'param-label';
+                trailLabel.textContent = 'Trail:';
+                
+                const trailValue = document.createElement('div');
+                trailValue.className = 'draggable-number';
+                trailValue.textContent = speciesTrailLengths[i].toFixed(2);
+                trailValue.id = `trail-${i}`;
+                
+                trailGroup.appendChild(trailLabel);
+                trailGroup.appendChild(trailValue);
+
+                row.appendChild(label);
+                row.appendChild(countGroup);
+                row.appendChild(sizeGroup);
+                row.appendChild(trailGroup);
+
+                container.appendChild(row);
+            }
+        }
+
+        // RGB to Hex conversion
+        function rgbToHex(rgbArray) {
+            const r = Math.round(rgbArray[0] * 255);
+            const g = Math.round(rgbArray[1] * 255);
+            const b = Math.round(rgbArray[2] * 255);
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        // ===== CONTROL SYSTEM & FORCE MATRIX =====
+        // Slider event handlers
+        function setupSliders() {
+            // Species count slider
+            document.getElementById('speciesCount').addEventListener('input', (e) => {
+                speciesCount = parseInt(e.target.value);
+                document.getElementById('speciesCount-value').textContent = speciesCount;
+                
+                // Regenerate UI and adjust particles
+                createParticleSettings();
+                createForceMatrix();
+                setupDraggableNumbers();
+                adjustParticleCounts();
+                
+                // Regenerate audio controls if audio is initialized
+                if (isAudioEnabled && speciesAudioSynths.length > 0) {
+                    initSpeciesSynths();
+                }
+            });
+
+            // Physics sliders
+            document.getElementById('friction').addEventListener('input', (e) => {
+                FRICTION = parseFloat(e.target.value);
+                document.getElementById('friction-value').textContent = FRICTION.toFixed(2);
+            });
+
+            document.getElementById('forceRadius').addEventListener('input', (e) => {
+                MAX_FORCE_DISTANCE = parseInt(e.target.value);
+                document.getElementById('forceRadius-value').textContent = MAX_FORCE_DISTANCE;
+                
+                // Update spatial grid cell size
+                if (spatialGrid) {
+                    spatialGrid.updateCellSize(MAX_FORCE_DISTANCE);
+                }
+            });
+
+            document.getElementById('simSpeed').addEventListener('input', (e) => {
+                SIMULATION_SPEED = parseFloat(e.target.value);
+                document.getElementById('simSpeed-value').textContent = SIMULATION_SPEED.toFixed(1);
+            });
+
+            document.getElementById('gravityStrength').addEventListener('input', (e) => {
+                GRAVITY_STRENGTH = parseFloat(e.target.value);
+                document.getElementById('gravityStrength-value').textContent = GRAVITY_STRENGTH.toFixed(1);
+            });
+
+            document.getElementById('bounceDamping').addEventListener('input', (e) => {
+                BOUNCE_DAMPING = parseFloat(e.target.value);
+                document.getElementById('bounceDamping-value').textContent = BOUNCE_DAMPING.toFixed(1);
+            });
+
+            document.getElementById('toroidalSpace').addEventListener('change', (e) => {
+                TOROIDAL_SPACE = e.target.checked;
+            });
+
+            // Audio sliders
+            document.getElementById('masterVolume').addEventListener('input', (e) => {
+                setMasterVolume(parseFloat(e.target.value));
+            });
+
+            document.getElementById('freqLow').addEventListener('input', (e) => {
+                const low = parseInt(e.target.value);
+                const high = frequencyRange.high;
+                if (low < high) {
+                    setFrequencyRange(low, high);
+                }
+            });
+
+            document.getElementById('freqHigh').addEventListener('input', (e) => {
+                const high = parseInt(e.target.value);
+                const low = frequencyRange.low;
+                if (high > low) {
+                    setFrequencyRange(low, high);
+                }
+            });
+
+            document.getElementById('velocityGainCurve').addEventListener('input', (e) => {
+                setGlobalVelocityGainCurve(parseFloat(e.target.value));
+            });
+
+            document.getElementById('velocityThreshold').addEventListener('input', (e) => {
+                setGlobalVelocityThreshold(parseFloat(e.target.value));
+            });
+
+            document.getElementById('masterMute').addEventListener('click', toggleMasterMute);
+            document.getElementById('audioInit').addEventListener('click', () => {
+                initAudioSystem();
+            });
+            
+            // Randomize matrix button
+            document.getElementById('randomizeMatrix').addEventListener('click', randomizeForceMatrix);
+        }
+
+        function setupDraggableNumbers() {
+            const draggableNumbers = document.querySelectorAll('.draggable-number');
+            
+            draggableNumbers.forEach(element => {
+                let isDragging = false;
+                let startY = 0;
+                let startValue = 0;
+                
+                element.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startY = e.clientY;
+                    startValue = parseFloat(element.textContent);
+                    element.classList.add('dragging');
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    
+                    const deltaY = startY - e.clientY; // Inverted for natural feel
+                    let sensitivity = 1;
+                    let newValue = startValue;
+                    
+                    // Determine parameter type and apply appropriate sensitivity
+                    if (element.id.includes('count')) {
+                        sensitivity = 0.5;
+                        newValue = Math.max(1, Math.min(1000, Math.round(startValue + deltaY * sensitivity)));
+                        
+                        // Update particle count
+                        const speciesIndex = parseInt(element.id.split('-')[1]);
+                        particleCounts[speciesIndex] = newValue;
+                        adjustParticleCounts();
+                        
+                    } else if (element.id.includes('size')) {
+                        sensitivity = 0.1;
+                        newValue = Math.max(2, Math.min(20, Math.round((startValue + deltaY * sensitivity) * 10) / 10));
+                        
+                        // Update particle size
+                        const speciesIndex = parseInt(element.id.split('-')[1]);
+                        particleSizes[speciesIndex] = newValue;
+                        updateParticleSizes();
+                        
+                    } else if (element.id.includes('trail')) {
+                        sensitivity = 0.01;
+                        newValue = Math.max(0.0, Math.min(0.99, Math.round((startValue + deltaY * sensitivity) * 100) / 100));
+                        
+                        // Update trail length
+                        const speciesIndex = parseInt(element.id.split('-')[1]);
+                        speciesTrailLengths[speciesIndex] = newValue;
+                        
+                        // If trail length is set to 0 or very close to 0, immediately remove all trail particles for this species
+                        if (newValue <= 0.01) {
+                            removeTrailParticlesForSpecies(speciesIndex);
+                        }
+                        
+                    } else if (element.id === 'canvas-width') {
+                        sensitivity = 5;
+                        newValue = Math.max(400, Math.min(1600, Math.round(startValue + deltaY * sensitivity)));
+                        
+                        // Update canvas width
+                        updateCanvasSize(newValue, canvasHeight);
+                        
+                    } else if (element.id === 'canvas-height') {
+                        sensitivity = 3;
+                        newValue = Math.max(300, Math.min(1200, Math.round(startValue + deltaY * sensitivity)));
+                        
+                        // Update canvas height
+                        updateCanvasSize(canvasWidth, newValue);
+                    }
+                    
+                    element.textContent = element.id.includes('trail') ? newValue.toFixed(2) : newValue;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        element.classList.remove('dragging');
+                    }
+                });
+            });
+        }
+
+        function createForceMatrix() {
+            const matrixGrid = document.getElementById('forceMatrix');
+            matrixGrid.innerHTML = '';
+            
+            // Set grid layout
+            matrixGrid.style.gridTemplateColumns = `repeat(${speciesCount + 1}, 1fr)`;
+            
+            // Add corner cell (empty)
+            const cornerCell = document.createElement('div');
+            cornerCell.className = 'matrix-header';
+            matrixGrid.appendChild(cornerCell);
+            
+            // Add column headers
+            for (let i = 0; i < speciesCount; i++) {
+                const header = document.createElement('div');
+                header.className = 'matrix-header';
+                header.style.color = rgbToHex(speciesColors[i]);
+                header.innerHTML = `<span>${String.fromCharCode(65 + i)}</span>`;
+                matrixGrid.appendChild(header);
+            }
+            
+            // Add row headers and matrix cells
+            for (let fromSpecies = 0; fromSpecies < speciesCount; fromSpecies++) {
+                // Row header
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'matrix-header';
+                rowHeader.style.color = rgbToHex(speciesColors[fromSpecies]);
+                rowHeader.textContent = String.fromCharCode(65 + fromSpecies);
+                matrixGrid.appendChild(rowHeader);
+                
+                // Matrix cells for this row
+                for (let toSpecies = 0; toSpecies < speciesCount; toSpecies++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'matrix-cell';
+                    cell.dataset.from = fromSpecies;
+                    cell.dataset.to = toSpecies;
+                    
+                    const value = RELATIONSHIP_MATRIX[fromSpecies][toSpecies];
+                    cell.textContent = value.toFixed(1);
+                    
+                    // Color coding based on force value
+                    if (value > 0.1) {
+                        // Green for attraction (positive values)
+                        const intensity = Math.abs(value);
+                        cell.style.backgroundColor = `rgb(${Math.round(50 * (1 - intensity))}, ${Math.round(150 + intensity * 105)}, ${Math.round(50 * (1 - intensity))})`;
+                    } else if (value < -0.1) {
+                        // Red for repulsion (negative values)
+                        const intensity = Math.abs(value);
+                        cell.style.backgroundColor = `rgb(${Math.round(150 + intensity * 105)}, ${Math.round(50 * (1 - intensity))}, ${Math.round(50 * (1 - intensity))})`;
+                    } else {
+                        cell.style.backgroundColor = '#666';
+                    }
+                    
+                    // Add drag interaction for force values
+                    (function(cellElement, from, to) {
+                        let isDragging = false;
+                        let startY = 0;
+                        let startValue = 0;
+                        
+                        cellElement.addEventListener('mousedown', (e) => {
+                            isDragging = true;
+                            startY = e.clientY;
+                            startValue = RELATIONSHIP_MATRIX[from][to];
+                            cellElement.classList.add('dragging');
+                            e.preventDefault();
+                        });
+                        
+                        const handleMouseMove = (e) => {
+                            if (!isDragging) return;
+                            
+                            const deltaY = startY - e.clientY;
+                            const sensitivity = 0.01;
+                            const newValue = Math.max(-1, Math.min(1, startValue + deltaY * sensitivity));
+                            const clampedValue = Math.round(newValue * 10) / 10;
+                            
+                            cellElement.textContent = clampedValue.toFixed(1);
+                            
+                            // Update color
+                            if (clampedValue > 0.1) {
+                                // Green for attraction (positive values)
+                                const intensity = Math.abs(clampedValue);
+                                cellElement.style.backgroundColor = `rgb(${Math.round(50 * (1 - intensity))}, ${Math.round(150 + intensity * 105)}, ${Math.round(50 * (1 - intensity))})`;
+                            } else if (clampedValue < -0.1) {
+                                // Red for repulsion (negative values)
+                                const intensity = Math.abs(clampedValue);
+                                cellElement.style.backgroundColor = `rgb(${Math.round(150 + intensity * 105)}, ${Math.round(50 * (1 - intensity))}, ${Math.round(50 * (1 - intensity))})`;
+                            } else {
+                                cellElement.style.backgroundColor = '#666';
+                            }
+                            
+                            // Update the relationship matrix
+                            RELATIONSHIP_MATRIX[from][to] = clampedValue;
+                        };
+                        
+                        const handleMouseUp = () => {
+                            if (isDragging) {
+                                isDragging = false;
+                                cellElement.classList.remove('dragging');
+                            }
+                        };
+                        
+                        document.addEventListener('mousemove', handleMouseMove);
+                        document.addEventListener('mouseup', handleMouseUp);
+                    })(cell, fromSpecies, toSpecies);
+                    
+                    matrixGrid.appendChild(cell);
+                }
+            }
+        }
+
+        // Ensure matrix size matches species count
+        function ensureMatrixSize() {
+            while (RELATIONSHIP_MATRIX.length < maxSpecies) {
+                RELATIONSHIP_MATRIX.push(new Array(maxSpecies).fill(-0.1));
+            }
+            for (let i = 0; i < RELATIONSHIP_MATRIX.length; i++) {
+                while (RELATIONSHIP_MATRIX[i].length < maxSpecies) {
+                    RELATIONSHIP_MATRIX[i].push(-0.1);
+                }
+            }
+        }
+
+        function randomizeForceMatrix() {
+            // Randomize the relationship matrix values
+            for (let i = 0; i < speciesCount; i++) {
+                for (let j = 0; j < speciesCount; j++) {
+                    // Generate random value between -1 and 1, rounded to 1 decimal place
+                    RELATIONSHIP_MATRIX[i][j] = Math.round((Math.random() * 2 - 1) * 10) / 10;
+                }
+            }
+            
+            // Recreate the matrix UI to reflect new values
+            createForceMatrix();
+            
+            console.log('🎲 Force matrix randomized');
+        }
+
+        function updateCanvasSize(newWidth, newHeight) {
+            // Store old dimensions for proportional scaling
+            const oldWidth = canvasWidth;
+            const oldHeight = canvasHeight;
+            
+            // Update canvas dimensions
+            canvasWidth = newWidth;
+            canvasHeight = newHeight;
+            
+            // Update canvas size
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            // No species trail canvases to update in single canvas system
+            
+            // Update WebGL viewport (if WebGL context exists)
+            if (typeof gl !== 'undefined' && gl) {
+                gl.viewport(0, 0, canvasWidth, canvasHeight);
+            }
+            
+            // Scale particle positions proportionally (preserves audio mappings)
+            if (particles.length > 0 && oldWidth > 0 && oldHeight > 0) {
+                const scaleX = canvasWidth / oldWidth;
+                const scaleY = canvasHeight / oldHeight;
+                
+                for (let particle of particles) {
+                    particle.x *= scaleX;
+                    particle.y *= scaleY;
+                    
+                }
+            }
+            
+            // Update spatial grid for new dimensions
+            if (spatialGrid) {
+                spatialGrid.canvasWidth = canvasWidth;
+                spatialGrid.canvasHeight = canvasHeight;
+                spatialGrid.gridWidth = Math.ceil(canvasWidth / spatialGrid.cellSize);
+                spatialGrid.gridHeight = Math.ceil(canvasHeight / spatialGrid.cellSize);
+                
+                // Recreate grid with new dimensions
+                const newSize = spatialGrid.gridWidth * spatialGrid.gridHeight;
+                spatialGrid.grid = [];
+                for (let i = 0; i < newSize; i++) {
+                    spatialGrid.grid[i] = [];
+                }
+            }
+            
+            // Update gravity point if active (scale it proportionally)
+            if (gravityPoint.active && oldWidth > 0 && oldHeight > 0) {
+                gravityPoint.x *= (canvasWidth / oldWidth);
+                gravityPoint.y *= (canvasHeight / oldHeight);
+            }
+            
+            // Update the canvas size display
+            document.getElementById('canvas-size').textContent = `${canvasWidth}×${canvasHeight}`;
+            
+            // Update the draggable controls
+            document.getElementById('canvas-width').textContent = canvasWidth;
+            document.getElementById('canvas-height').textContent = canvasHeight;
+        }
+
+
+        // ===== INITIALIZATION =====
+        // Initialize and start
+        initCanvas(); // Initialize canvas to default size
+        ensureMatrixSize();
+        createParticleSettings();
+        createForceMatrix();
+        setupSliders();
+        setupDraggableNumbers();
+        setupCanvasInteraction(); // Setup gravity interaction
+        initSpatialGrid(); // Initialize spatial partitioning system
+        initTrailSystem(); // Initialize colorful trail system
+        initParticles();
+        
+        // Update audio status to show it's ready to initialize
+        updateAudioStatus('Click to Start');
+        
+        animate(); // Use original animation loop from physics-core.js
+    </script>
+</body>
+</html>
