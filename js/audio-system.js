@@ -979,39 +979,12 @@ function rgbToHex(rgbArray) {
 // Global variable to track currently selected species for audio controls
 let selectedSpeciesForAudio = 0;
 
-// Create species selector dropdown
-function createSpeciesSelector() {
-    const selector = document.getElementById('speciesSelector');
-    if (!selector) return;
-    
-    selector.innerHTML = '';
-    
-    // Use window variables if available, fallback to defaults
-    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
-    const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
-    
-    for (let i = 0; i < currentSpeciesCount; i++) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = `Species ${String.fromCharCode(65 + i)}`;
-        option.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
-        if (i === selectedSpeciesForAudio) option.selected = true;
-        selector.appendChild(option);
-    }
-    
-    selector.addEventListener('change', (e) => {
-        selectedSpeciesForAudio = parseInt(e.target.value);
-        createSpeciesAudioControls();
-    });
-}
+// Species selector is now handled by the species tab system in main HTML
 
 // Create species audio controls UI - defined globally (now shows single species)
 function createSpeciesAudioControls() {
     const container = document.getElementById('speciesAudioControls');
     if (!container) return;
-    
-    // Create species selector first
-    createSpeciesSelector();
     
     container.innerHTML = '';
     

@@ -597,29 +597,72 @@ function render() {
 let lastFrameTime = performance.now();
 let frameCount = 0;
 let fpsUpdateTime = performance.now();
+let frameTimeHistory = [];
 
 function animate() {
     const currentTime = performance.now();
+    const frameTime = currentTime - lastFrameTime;
     
     updateParticles();
     render();
     
-    // FPS tracking
+    // Track frame time for performance metrics
+    frameTimeHistory.push(frameTime);
+    if (frameTimeHistory.length > 60) {
+        frameTimeHistory.shift(); // Keep only last 60 frames
+    }
+    
+    // FPS and performance tracking
     frameCount++;
     if (currentTime - fpsUpdateTime >= 500) { // Update every 500ms
         const fps = Math.round((frameCount * 1000) / (currentTime - fpsUpdateTime));
-        document.getElementById('fps-display').textContent = fps;
+        const avgFrameTime = frameTimeHistory.reduce((a, b) => a + b, 0) / frameTimeHistory.length;
         
-        // Update canvas size display
-        document.getElementById('canvas-size').textContent = `${canvasWidth}×${canvasHeight}`;
+        // Update performance displays
+        const fpsElement = document.getElementById('fps-display');
+        if (fpsElement) fpsElement.textContent = fps;
         
-        // Update particle count display
-        document.getElementById('total-particles').textContent = particles.length;
+        const frameTimeElement = document.getElementById('frame-time');
+        if (frameTimeElement) frameTimeElement.textContent = `${avgFrameTime.toFixed(1)}ms`;
+        
+        const canvasSizeElement = document.getElementById('canvas-size');
+        if (canvasSizeElement) canvasSizeElement.textContent = `${canvasWidth}×${canvasHeight}`;
+        
+        const totalParticlesElement = document.getElementById('total-particles');
+        if (totalParticlesElement) totalParticlesElement.textContent = particles.length;
+        
+        const trailParticlesElement = document.getElementById('trail-particles');
+        if (trailParticlesElement) trailParticlesElement.textContent = trailParticles.length;
         
         // Update grid info
         if (spatialGrid) {
-            const gridInfo = `${spatialGrid.gridWidth}×${spatialGrid.gridHeight} cells`;
-            document.getElementById('grid-info').textContent = gridInfo;
+            const gridInfo = `${spatialGrid.gridWidth}×${spatialGrid.gridHeight}`;
+            const gridElement = document.getElementById('grid-info');
+            if (gridElement) gridElement.textContent = gridInfo;
+        }
+        
+        // Update audio grain count
+        let totalGrains = 0;
+        if (typeof speciesAudioSynths !== 'undefined' && speciesAudioSynths.length > 0) {
+            for (let synth of speciesAudioSynths) {
+                if (synth && synth.grains) {
+                    totalGrains += synth.grains.length;
+                }
+            }
+        }
+        const totalGrainsElement = document.getElementById('total-grains');
+        if (totalGrainsElement) totalGrainsElement.textContent = totalGrains;
+        
+        // Update audio latency
+        const audioLatencyElement = document.getElementById('audio-latency');
+        if (audioLatencyElement && typeof audioContext !== 'undefined' && audioContext) {
+            const latency = (audioContext.baseLatency * 1000).toFixed(1) + 'ms';
+            audioLatencyElement.textContent = latency;
+        }
+        
+        // Update species tab info
+        if (typeof updateSpeciesTabInfo === 'function') {
+            updateSpeciesTabInfo();
         }
         
         frameCount = 0;

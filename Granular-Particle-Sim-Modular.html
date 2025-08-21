@@ -415,6 +415,135 @@
             border-radius: 6px;
         }
         
+        /* Species Tab System */
+        .species-tab-container {
+            margin-bottom: 15px;
+        }
+        
+        .species-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            border-radius: 6px;
+        }
+        
+        .species-tab {
+            flex: 1;
+            min-width: 80px;
+            padding: 8px 12px;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .species-tab:hover {
+            background: #333;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .species-tab.active {
+            background: #444;
+            border-color: currentColor;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            transform: translateY(-2px);
+        }
+        
+        .species-tab-label {
+            display: block;
+            margin-bottom: 2px;
+        }
+        
+        .species-tab-info {
+            font-size: 10px;
+            opacity: 0.8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .species-audio-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+            transition: background-color 0.2s ease;
+        }
+        
+        .species-audio-status.active {
+            background: #4CAF50;
+            box-shadow: 0 0 4px #4CAF50;
+        }
+        
+        /* Collapsible Sections */
+        .collapsible-section {
+            margin-bottom: 15px;
+        }
+        
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        
+        .collapsible-header:hover {
+            background: #252525;
+        }
+        
+        .collapsible-header h3 {
+            margin: 0;
+            font-size: 15px;
+        }
+        
+        .collapsible-toggle {
+            font-size: 14px;
+            transition: transform 0.2s ease;
+        }
+        
+        .collapsible-content {
+            border: 1px solid #444;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            background: #111;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .collapsible-content.collapsed {
+            max-height: 0;
+            border: none;
+        }
+        
+        .collapsible-content:not(.collapsed) {
+            max-height: 1000px;
+        }
+        
+        .collapsible-section.collapsed .collapsible-toggle {
+            transform: rotate(180deg);
+        }
+        
+        .collapsible-inner {
+            padding: 15px;
+        }
+        
         .audio-button {
             background: #444;
             color: #fff;
@@ -645,12 +774,33 @@
         <!-- Physics & Simulation Panel -->
         <div class="tab-panel active" id="physics-panel">
             <div class="control-panel physics-panel">
-        <div class="control-group">
-            <h3>Simulation Control</h3>
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <button onclick="resetSimulation()" style="flex: 1;">Reset Simulation</button>
-                <button onclick="togglePause()" style="flex: 1;">Pause/Resume</button>
+        <div class="collapsible-section" id="presetSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('presetSection')">
+                <h3>Presets & Control</h3>
+                <span class="collapsible-toggle">▼</span>
             </div>
+            <div class="collapsible-content" id="presetContent">
+                <div class="collapsible-inner">
+                    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <button onclick="savePreset()" style="flex: 1; background: #2a5f2a; font-size: 12px; padding: 8px;">💾 Save</button>
+                        <button onclick="loadPreset()" style="flex: 1; background: #2a2a5f; font-size: 12px; padding: 8px;">📁 Load</button>
+                        <button onclick="exportPreset()" style="flex: 1; background: #5f2a5f; font-size: 12px; padding: 8px;">📤 Export</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                        <select id="presetSelect" style="flex: 1; background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 3px; font-size: 12px;">
+                            <option value="">Select Preset...</option>
+                        </select>
+                        <button onclick="deletePreset()" style="background: #5f2a2a; font-size: 12px; padding: 5px 10px;">🗑️</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button onclick="resetSimulation()" style="flex: 1; font-size: 12px; padding: 8px;">🔄 Reset</button>
+                        <button onclick="togglePause()" style="flex: 1; font-size: 12px; padding: 8px;">⏯️ Pause</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group">
             <div class="slider-row">
                 <label>Canvas Width</label>
                 <div class="slider-container">
@@ -678,41 +828,82 @@
             </div>
         </div>
 
-        <div class="control-group">
-            <h3>Force Relationships</h3>
-            <div class="matrix-container">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0 10px 0;">
-                    <h4 style="margin: 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
-                    <button id="randomizeMatrix" class="audio-button" style="font-size: 12px; padding: 4px 8px;">🎲 Randomize</button>
-                </div>
-                <div class="matrix-grid" id="forceMatrix">
-                    <!-- Matrix will be generated dynamically -->
-                </div>
-                <div class="force-legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background: #ff4444;"></div>
-                        <span>Repulsion (-1.0)</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background: #666;"></div>
-                        <span>Neutral (0.0)</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background: #44ff44;"></div>
-                        <span>Attraction (+1.0)</span>
+        <div class="collapsible-section" id="forceMatrixSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('forceMatrixSection')">
+                <h3>Force Relationships</h3>
+                <span class="collapsible-toggle">▼</span>
+            </div>
+            <div class="collapsible-content" id="forceMatrixContent">
+                <div class="collapsible-inner">
+                    <div class="matrix-container">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin: 0 0 10px 0;">
+                            <h4 style="margin: 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
+                            <button id="randomizeMatrix" class="audio-button" style="font-size: 12px; padding: 4px 8px;">🎲 Randomize</button>
+                        </div>
+                        <div class="matrix-grid" id="forceMatrix">
+                            <!-- Matrix will be generated dynamically -->
+                        </div>
+                        <div class="force-legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #ff4444;"></div>
+                                <span>Repulsion (-1.0)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #666;"></div>
+                                <span>Neutral (0.0)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #44ff44;"></div>
+                                <span>Attraction (+1.0)</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="control-group">
-            <h3>Performance</h3>
-            <div style="font-size: 12px; color: #888; line-height: 1.4;">
-                <div>FPS: <span id="fps-display" style="color: #4CAF50;">60</span></div>
-                <div>Canvas: <span id="canvas-size" style="color: #4CAF50;">1200×800</span></div>
-                <div>Spatial Grid: <span id="grid-info" style="color: #4CAF50;">Active</span></div>
-                <div>Trails: <span style="color: #4CAF50;">Simple Efficient System</span></div>
-                <div>Particles: <span id="total-particles">400</span></div>
+        <div class="collapsible-section" id="performanceSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('performanceSection')">
+                <h3>Performance Metrics</h3>
+                <span class="collapsible-toggle">▼</span>
+            </div>
+            <div class="collapsible-content" id="performanceContent">
+                <div class="collapsible-inner">
+                    <div style="font-size: 12px; color: #888; line-height: 1.6;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>FPS:</span>
+                            <span id="fps-display" style="color: #4CAF50; font-family: monospace;">60</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Frame Time:</span>
+                            <span id="frame-time" style="color: #4CAF50; font-family: monospace;">16.7ms</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Canvas:</span>
+                            <span id="canvas-size" style="color: #4CAF50; font-family: monospace;">1200×800</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Particles:</span>
+                            <span id="total-particles" style="color: #4CAF50; font-family: monospace;">400</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Trail Particles:</span>
+                            <span id="trail-particles" style="color: #4CAF50; font-family: monospace;">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Spatial Grid:</span>
+                            <span id="grid-info" style="color: #4CAF50; font-family: monospace;">Active</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Audio Grains:</span>
+                            <span id="total-grains" style="color: #4CAF50; font-family: monospace;">0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Audio Latency:</span>
+                            <span id="audio-latency" style="color: #4CAF50; font-family: monospace;">N/A</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -819,18 +1010,22 @@
                     </div>
                 </div>
                 
-                <div class="control-group">
-                    <h3>Individual Species Audio</h3>
-                    <div class="slider-row">
-                        <label>Select Species:</label>
-                        <div class="slider-container">
-                            <select id="speciesSelector" style="flex: 1; background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 3px; cursor: pointer;">
-                                <!-- Options will be generated dynamically -->
-                            </select>
-                        </div>
+                <div class="collapsible-section" id="speciesAudioSection">
+                    <div class="collapsible-header" onclick="toggleCollapsible('speciesAudioSection')">
+                        <h3>Individual Species Audio</h3>
+                        <span class="collapsible-toggle">▼</span>
                     </div>
-                    <div class="species-audio-container" id="speciesAudioControls">
-                        <!-- Species audio controls will be generated dynamically -->
+                    <div class="collapsible-content" id="speciesAudioContent">
+                        <div class="collapsible-inner">
+                            <div class="species-tab-container">
+                                <div class="species-tabs" id="speciesTabs">
+                                    <!-- Species tabs will be generated dynamically -->
+                                </div>
+                            </div>
+                            <div class="species-audio-container" id="speciesAudioControls">
+                                <!-- Species audio controls will be generated dynamically -->
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -949,6 +1144,15 @@
                 createForceMatrix();
                 setupDraggableNumbers();
                 adjustParticleCounts();
+                
+                // Regenerate species tabs
+                createSpeciesTabs();
+                
+                // Ensure current tab is valid
+                if (currentSpeciesTab >= speciesCount) {
+                    currentSpeciesTab = 0;
+                    selectedSpeciesForAudio = 0;
+                }
                 
                 // Regenerate audio controls if audio is initialized
                 if (isAudioEnabled && speciesAudioSynths.length > 0) {
@@ -1340,6 +1544,647 @@
             
             console.log('🎯 Tab system initialized');
         }
+        
+        // ===== COLLAPSIBLE SECTIONS =====
+        function toggleCollapsible(sectionId) {
+            const section = document.getElementById(sectionId);
+            const content = section.querySelector('.collapsible-content');
+            const toggle = section.querySelector('.collapsible-toggle');
+            
+            section.classList.toggle('collapsed');
+            content.classList.toggle('collapsed');
+            
+            // Save state to localStorage
+            const isCollapsed = section.classList.contains('collapsed');
+            localStorage.setItem(`collapsible-${sectionId}`, isCollapsed.toString());
+        }
+        
+        // Initialize collapsible sections from saved state
+        function initCollapsibleSections() {
+            const sections = document.querySelectorAll('.collapsible-section');
+            sections.forEach(section => {
+                const sectionId = section.id;
+                const saved = localStorage.getItem(`collapsible-${sectionId}`);
+                if (saved === 'true') {
+                    section.classList.add('collapsed');
+                    const content = section.querySelector('.collapsible-content');
+                    content.classList.add('collapsed');
+                }
+            });
+        }
+        
+        // ===== SPECIES TAB SYSTEM =====
+        let currentSpeciesTab = 0;
+        
+        function createSpeciesTabs() {
+            const tabContainer = document.getElementById('speciesTabs');
+            if (!tabContainer) return;
+            
+            tabContainer.innerHTML = '';
+            
+            for (let i = 0; i < speciesCount; i++) {
+                const tab = document.createElement('div');
+                tab.className = 'species-tab';
+                if (i === currentSpeciesTab) tab.classList.add('active');
+                tab.style.color = rgbToHex(speciesColors[i]);
+                tab.addEventListener('click', () => selectSpeciesTab(i));
+                
+                const label = document.createElement('div');
+                label.className = 'species-tab-label';
+                label.textContent = `Species ${String.fromCharCode(65 + i)}`;
+                
+                const info = document.createElement('div');
+                info.className = 'species-tab-info';
+                
+                const particleCount = document.createElement('span');
+                particleCount.textContent = particleCounts[i] || 0;
+                particleCount.id = `species-count-${i}`;
+                
+                const audioStatus = document.createElement('div');
+                audioStatus.className = 'species-audio-status';
+                audioStatus.id = `species-audio-status-${i}`;
+                
+                info.appendChild(particleCount);
+                info.appendChild(audioStatus);
+                
+                tab.appendChild(label);
+                tab.appendChild(info);
+                tabContainer.appendChild(tab);
+            }
+            
+            console.log(`🎯 Created ${speciesCount} species tabs`);
+        }
+        
+        function selectSpeciesTab(speciesIndex) {
+            if (speciesIndex === currentSpeciesTab) return;
+            
+            currentSpeciesTab = speciesIndex;
+            selectedSpeciesForAudio = speciesIndex;
+            
+            // Update tab appearance
+            const tabs = document.querySelectorAll('.species-tab');
+            tabs.forEach((tab, index) => {
+                tab.classList.toggle('active', index === speciesIndex);
+            });
+            
+            // Regenerate audio controls for selected species
+            createSpeciesAudioControls();
+            
+            // Setup draggable numbers
+            if (typeof setupDraggableNumbers === 'function') {
+                setTimeout(() => setupDraggableNumbers(), 0);
+            }
+            
+            console.log(`🎯 Selected species ${String.fromCharCode(65 + speciesIndex)}`);
+        }
+        
+        // Update species tab info (particle counts, audio status)
+        function updateSpeciesTabInfo() {
+            for (let i = 0; i < speciesCount; i++) {
+                const countElement = document.getElementById(`species-count-${i}`);
+                if (countElement) {
+                    countElement.textContent = particleCounts[i] || 0;
+                }
+                
+                const statusElement = document.getElementById(`species-audio-status-${i}`);
+                if (statusElement && speciesAudioSynths[i]) {
+                    const hasAudio = speciesAudioSynths[i].audioBuffer && isAudioEnabled;
+                    const isActive = hasAudio && !speciesAudioSynths[i].isMuted;
+                    statusElement.classList.toggle('active', isActive);
+                }
+            }
+        }
+        
+        // ===== KEYBOARD SHORTCUTS =====
+        let keyboardEnabled = true;
+        
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                // Skip if user is typing in an input field
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+                    return;
+                }
+                
+                if (!keyboardEnabled) return;
+                
+                switch(e.code) {
+                    case 'Space':
+                        e.preventDefault();
+                        togglePause();
+                        showToast('Simulation ' + (isPaused ? 'Paused' : 'Resumed'));
+                        break;
+                        
+                    case 'KeyR':
+                        if (e.ctrlKey || e.metaKey) return; // Don't interfere with refresh
+                        e.preventDefault();
+                        resetSimulation();
+                        showToast('Simulation Reset');
+                        break;
+                        
+                    case 'KeyM':
+                        e.preventDefault();
+                        toggleMasterMute();
+                        showToast('Master ' + (isMasterMuted ? 'Muted' : 'Unmuted'));
+                        break;
+                        
+                    case 'KeyS':
+                        if (e.ctrlKey || e.metaKey) return; // Don't interfere with save
+                        e.preventDefault();
+                        soloCurrentSpecies();
+                        break;
+                        
+                    case 'Equal': // Plus key
+                        if (!e.shiftKey) break; // Only on Shift+= (+)
+                        e.preventDefault();
+                        adjustMasterVolume(0.05);
+                        break;
+                        
+                    case 'Minus':
+                        e.preventDefault();
+                        adjustMasterVolume(-0.05);
+                        break;
+                        
+                    case 'Digit1':
+                    case 'Digit2':
+                    case 'Digit3':
+                    case 'Digit4':
+                    case 'Digit5':
+                    case 'Digit6':
+                    case 'Digit7':
+                    case 'Digit8':
+                        e.preventDefault();
+                        const speciesIndex = parseInt(e.code.slice(-1)) - 1;
+                        if (speciesIndex < speciesCount) {
+                            selectSpeciesTab(speciesIndex);
+                            showToast(`Species ${String.fromCharCode(65 + speciesIndex)} Selected`);
+                        }
+                        break;
+                        
+                    case 'ArrowUp':
+                    case 'ArrowDown':
+                    case 'ArrowLeft':
+                    case 'ArrowRight':
+                        // Fine-tune selected parameter (could be expanded)
+                        e.preventDefault();
+                        break;
+                        
+                    case 'KeyH':
+                        e.preventDefault();
+                        showKeyboardHelp();
+                        break;
+                }
+            });
+            
+            console.log('⌨️ Keyboard shortcuts initialized');
+        }
+        
+        function adjustMasterVolume(delta) {
+            const newVolume = Math.max(0, Math.min(1, masterVolume + delta));
+            setMasterVolume(newVolume);
+            document.getElementById('masterVolume').value = newVolume;
+            showToast(`Master Volume: ${Math.round(newVolume * 100)}%`);
+        }
+        
+        function soloCurrentSpecies() {
+            const currentSynth = speciesAudioSynths[currentSpeciesTab];
+            if (!currentSynth) return;
+            
+            // Toggle solo: if current is unmuted and others are muted, unmute all
+            // Otherwise, mute all except current
+            let othersMuted = true;
+            for (let i = 0; i < speciesCount; i++) {
+                if (i !== currentSpeciesTab && speciesAudioSynths[i] && !speciesAudioSynths[i].isMuted) {
+                    othersMuted = false;
+                    break;
+                }
+            }
+            
+            if (!currentSynth.isMuted && othersMuted) {
+                // Unsolo - unmute all
+                for (let i = 0; i < speciesCount; i++) {
+                    if (speciesAudioSynths[i]) {
+                        speciesAudioSynths[i].setMute(false);
+                        const button = document.getElementById(`speciesMute${i}`);
+                        if (button) {
+                            button.textContent = '🔊';
+                            button.classList.add('active');
+                        }
+                    }
+                }
+                showToast('All Species Unmuted');
+            } else {
+                // Solo current species
+                for (let i = 0; i < speciesCount; i++) {
+                    const shouldMute = i !== currentSpeciesTab;
+                    if (speciesAudioSynths[i]) {
+                        speciesAudioSynths[i].setMute(shouldMute);
+                        const button = document.getElementById(`speciesMute${i}`);
+                        if (button) {
+                            button.textContent = shouldMute ? '🔇' : '🔊';
+                            button.classList.toggle('active', !shouldMute);
+                        }
+                    }
+                }
+                showToast(`Species ${String.fromCharCode(65 + currentSpeciesTab)} Soloed`);
+            }
+        }
+        
+        function showKeyboardHelp() {
+            const helpText = `
+🎹 KEYBOARD SHORTCUTS:
+
+Space     - Pause/Resume simulation
+R         - Reset simulation
+M         - Master mute toggle
+S         - Solo current species
++/-       - Adjust master volume
+1-8       - Switch species tabs
+H         - Show this help
+
+📱 Click OK to dismiss`;
+            
+            alert(helpText);
+        }
+        
+        // ===== TOAST NOTIFICATIONS =====
+        function showToast(message, duration = 2000) {
+            // Remove existing toast
+            const existingToast = document.getElementById('toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+            
+            // Create new toast
+            const toast = document.createElement('div');
+            toast.id = 'toast';
+            toast.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: #333;
+                color: #fff;
+                padding: 10px 20px;
+                border-radius: 6px;
+                border: 1px solid #555;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 10000;
+                opacity: 0;
+                transform: translateX(100%);
+                transition: all 0.3s ease;
+                font-family: Arial, sans-serif;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                max-width: 300px;
+            `;
+            toast.textContent = message;
+            
+            document.body.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(0)';
+            }, 10);
+            
+            // Animate out and remove
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
+                }, 300);
+            }, duration);
+        }
+        
+        // ===== PRESET SYSTEM =====
+        function getCurrentState() {
+            const state = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                
+                // Canvas settings
+                canvasWidth: canvasWidth,
+                canvasHeight: canvasHeight,
+                
+                // Species settings
+                speciesCount: speciesCount,
+                particleCounts: [...particleCounts],
+                particleSizes: [...particleSizes],
+                speciesTrailLengths: [...speciesTrailLengths],
+                speciesColors: speciesColors.map(color => [...color]),
+                
+                // Physics settings
+                friction: FRICTION,
+                maxForceDistance: MAX_FORCE_DISTANCE,
+                simulationSpeed: SIMULATION_SPEED,
+                toroidalSpace: TOROIDAL_SPACE,
+                gravityStrength: GRAVITY_STRENGTH,
+                bounceDamping: BOUNCE_DAMPING,
+                relationshipMatrix: RELATIONSHIP_MATRIX.map(row => [...row]),
+                
+                // Audio settings
+                masterVolume: masterVolume,
+                frequencyRange: {...frequencyRange},
+                globalVelocityGainCurve: globalVelocityGainCurve,
+                globalVelocityThreshold: globalVelocityThreshold,
+                
+                // Species audio settings (excluding audio buffers)
+                speciesAudioSettings: speciesAudioSynths.map(synth => ({
+                    volume: synth ? synth.volume : 0.7,
+                    isMuted: synth ? synth.isMuted : false,
+                    loopMode: synth ? synth.loopMode : 'forward',
+                    pitch: synth ? synth.pitch : 0,
+                    detune: synth ? synth.detune : 0,
+                    fadeLength: synth ? synth.fadeLength : 0.002,
+                    sampleStart: synth ? synth.sampleStart : 0.0,
+                    sampleEnd: synth ? synth.sampleEnd : 1.0
+                }))
+            };
+            
+            return state;
+        }
+        
+        function applyState(state) {
+            try {
+                // Validate version compatibility
+                if (!state.version || state.version !== '1.0') {
+                    throw new Error('Incompatible preset version');
+                }
+                
+                // Apply canvas settings
+                updateCanvasSize(state.canvasWidth || 1200, state.canvasHeight || 800);
+                
+                // Apply species settings
+                speciesCount = state.speciesCount || 2;
+                document.getElementById('speciesCount').value = speciesCount;
+                document.getElementById('speciesCount-value').textContent = speciesCount;
+                
+                if (state.particleCounts) particleCounts.splice(0, particleCounts.length, ...state.particleCounts);
+                if (state.particleSizes) particleSizes.splice(0, particleSizes.length, ...state.particleSizes);
+                if (state.speciesTrailLengths) speciesTrailLengths.splice(0, speciesTrailLengths.length, ...state.speciesTrailLengths);
+                if (state.speciesColors) {
+                    speciesColors.splice(0, speciesColors.length, ...state.speciesColors.map(color => [...color]));
+                }
+                
+                // Apply physics settings
+                FRICTION = state.friction || 0.95;
+                MAX_FORCE_DISTANCE = state.maxForceDistance || 60;
+                SIMULATION_SPEED = state.simulationSpeed || 1.0;
+                TOROIDAL_SPACE = state.toroidalSpace !== undefined ? state.toroidalSpace : true;
+                GRAVITY_STRENGTH = state.gravityStrength || 0.0;
+                BOUNCE_DAMPING = state.bounceDamping || 0.8;
+                
+                if (state.relationshipMatrix) {
+                    RELATIONSHIP_MATRIX.splice(0, RELATIONSHIP_MATRIX.length, ...state.relationshipMatrix.map(row => [...row]));
+                }
+                
+                // Update physics UI
+                document.getElementById('friction').value = FRICTION;
+                document.getElementById('friction-value').textContent = FRICTION.toFixed(2);
+                document.getElementById('forceRadius').value = MAX_FORCE_DISTANCE;
+                document.getElementById('forceRadius-value').textContent = MAX_FORCE_DISTANCE;
+                document.getElementById('simSpeed').value = SIMULATION_SPEED;
+                document.getElementById('simSpeed-value').textContent = SIMULATION_SPEED.toFixed(1);
+                document.getElementById('gravityStrength').value = GRAVITY_STRENGTH;
+                document.getElementById('gravityStrength-value').textContent = GRAVITY_STRENGTH.toFixed(1);
+                document.getElementById('bounceDamping').value = BOUNCE_DAMPING;
+                document.getElementById('bounceDamping-value').textContent = BOUNCE_DAMPING.toFixed(1);
+                document.getElementById('toroidalSpace').checked = TOROIDAL_SPACE;
+                
+                // Apply audio settings
+                masterVolume = state.masterVolume || 0.3;
+                document.getElementById('masterVolume').value = masterVolume;
+                setMasterVolume(masterVolume);
+                
+                if (state.frequencyRange) {
+                    setFrequencyRange(state.frequencyRange.low || 80, state.frequencyRange.high || 8000);
+                    document.getElementById('freqLow').value = frequencyRange.low;
+                    document.getElementById('freqHigh').value = frequencyRange.high;
+                }
+                
+                setGlobalVelocityGainCurve(state.globalVelocityGainCurve || 1.0);
+                document.getElementById('velocityGainCurve').value = globalVelocityGainCurve;
+                
+                setGlobalVelocityThreshold(state.globalVelocityThreshold || 0.0);
+                document.getElementById('velocityThreshold').value = globalVelocityThreshold;
+                
+                // Apply species audio settings (preserve existing audio buffers)
+                if (state.speciesAudioSettings) {
+                    state.speciesAudioSettings.forEach((settings, i) => {
+                        if (speciesAudioSynths[i] && settings) {
+                            speciesAudioSynths[i].volume = settings.volume || 0.7;
+                            speciesAudioSynths[i].isMuted = settings.isMuted || false;
+                            speciesAudioSynths[i].loopMode = settings.loopMode || 'forward';
+                            speciesAudioSynths[i].pitch = settings.pitch || 0;
+                            speciesAudioSynths[i].detune = settings.detune || 0;
+                            speciesAudioSynths[i].fadeLength = settings.fadeLength || 0.002;
+                            speciesAudioSynths[i].sampleStart = settings.sampleStart || 0.0;
+                            speciesAudioSynths[i].sampleEnd = settings.sampleEnd || 1.0;
+                        }
+                    });
+                }
+                
+                // Regenerate UI
+                ensureMatrixSize();
+                createForceMatrix();
+                createSpeciesTabs();
+                adjustParticleCounts();
+                
+                // Update spatial grid if needed
+                if (spatialGrid) {
+                    spatialGrid.updateCellSize(MAX_FORCE_DISTANCE);
+                }
+                
+                // Regenerate audio controls
+                if (isAudioEnabled) {
+                    createSpeciesAudioControls();
+                    setTimeout(() => setupDraggableNumbers(), 0);
+                }
+                
+                console.log('⚙️ Preset applied successfully');
+                return true;
+                
+            } catch (error) {
+                console.error('Failed to apply preset:', error);
+                showToast('Failed to load preset: ' + error.message, 3000);
+                return false;
+            }
+        }
+        
+        function savePreset() {
+            const name = prompt('Enter preset name:');
+            if (!name || !name.trim()) return;
+            
+            const state = getCurrentState();
+            state.name = name.trim();
+            
+            // Save to localStorage
+            const presets = getStoredPresets();
+            presets[name] = state;
+            localStorage.setItem('granular-presets', JSON.stringify(presets));
+            
+            updatePresetSelect();
+            showToast(`Preset "${name}" saved`);
+            
+            console.log(`💾 Preset saved: ${name}`);
+        }
+        
+        function loadPreset() {
+            const select = document.getElementById('presetSelect');
+            const presetName = select.value;
+            
+            if (!presetName) {
+                showToast('Please select a preset to load');
+                return;
+            }
+            
+            const presets = getStoredPresets();
+            const preset = presets[presetName];
+            
+            if (!preset) {
+                showToast('Preset not found');
+                return;
+            }
+            
+            if (applyState(preset)) {
+                showToast(`Preset "${presetName}" loaded`);
+                console.log(`📁 Preset loaded: ${presetName}`);
+            }
+        }
+        
+        function deletePreset() {
+            const select = document.getElementById('presetSelect');
+            const presetName = select.value;
+            
+            if (!presetName) {
+                showToast('Please select a preset to delete');
+                return;
+            }
+            
+            if (!confirm(`Delete preset "${presetName}"?`)) {
+                return;
+            }
+            
+            const presets = getStoredPresets();
+            delete presets[presetName];
+            localStorage.setItem('granular-presets', JSON.stringify(presets));
+            
+            updatePresetSelect();
+            showToast(`Preset "${presetName}" deleted`);
+            
+            console.log(`🗑️ Preset deleted: ${presetName}`);
+        }
+        
+        function exportPreset() {
+            const select = document.getElementById('presetSelect');
+            const presetName = select.value;
+            
+            let preset, filename;
+            
+            if (presetName) {
+                const presets = getStoredPresets();
+                preset = presets[presetName];
+                filename = `granular-preset-${presetName.replace(/[^a-zA-Z0-9]/g, '-')}.json`;
+            } else {
+                preset = getCurrentState();
+                preset.name = 'Current State';
+                filename = `granular-preset-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+            }
+            
+            if (!preset) {
+                showToast('No preset to export');
+                return;
+            }
+            
+            // Create download link
+            const dataStr = JSON.stringify(preset, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportLink = document.createElement('a');
+            exportLink.setAttribute('href', dataUri);
+            exportLink.setAttribute('download', filename);
+            exportLink.click();
+            
+            showToast(`Preset exported as ${filename}`);
+            
+            console.log(`📤 Preset exported: ${filename}`);
+        }
+        
+        function importPreset() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const preset = JSON.parse(e.target.result);
+                        
+                        if (applyState(preset)) {
+                            // Also save to localStorage if it has a name
+                            if (preset.name) {
+                                const presets = getStoredPresets();
+                                presets[preset.name] = preset;
+                                localStorage.setItem('granular-presets', JSON.stringify(presets));
+                                updatePresetSelect();
+                                showToast(`Preset "${preset.name}" imported and saved`);
+                            } else {
+                                showToast('Preset imported (not saved)');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Import error:', error);
+                        showToast('Invalid preset file');
+                    }
+                };
+                reader.readAsText(file);
+            });
+            input.click();
+        }
+        
+        function getStoredPresets() {
+            try {
+                return JSON.parse(localStorage.getItem('granular-presets') || '{}');
+            } catch (error) {
+                console.error('Failed to load presets:', error);
+                return {};
+            }
+        }
+        
+        function updatePresetSelect() {
+            const select = document.getElementById('presetSelect');
+            const presets = getStoredPresets();
+            
+            select.innerHTML = '<option value="">Select Preset...</option>';
+            
+            Object.keys(presets).sort().forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+        }
+        
+        function initPresetSystem() {
+            updatePresetSelect();
+            
+            // Add import functionality to the load button's context menu
+            const loadButton = document.querySelector('button[onclick="loadPreset()"]');
+            if (loadButton) {
+                loadButton.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    importPreset();
+                });
+                loadButton.title = 'Left-click: Load selected preset\nRight-click: Import preset file';
+            }
+            
+            console.log('🎯 Preset system initialized');
+        }
 
         // ===== INITIALIZATION =====
         // Initialize and start
@@ -1357,10 +2202,19 @@
         initAudioUI();
         updateAudioStatus('Click to Start');
         
-        // Initialize tab system
+        // Initialize interface systems
         initTabSystem();
+        initCollapsibleSections();
+        createSpeciesTabs();
+        initKeyboardShortcuts();
+        initPresetSystem();
         
         animate(); // Use original animation loop from physics-core.js
+        
+        // Show welcome message
+        setTimeout(() => {
+            showToast('Press H for keyboard shortcuts', 3000);
+        }, 1000);
     </script>
 </body>
 </html>
