@@ -129,6 +129,11 @@ class Particle {
         // Track previous position for trail particle spawning
         this.prevX = this.x;
         this.prevY = this.y;
+        
+        // Collision tracking for audio
+        this.collisionEvents = []; // Array of recent collision events
+        this.lastCollisionTime = 0;
+        this.collisionForce = 0; // Current collision force magnitude
     }
 
     updateSize() {
@@ -188,6 +193,35 @@ class Particle {
                 // Apply separation force (push away from each other)
                 fx -= separationForce * normalizedDx;
                 fy -= separationForce * normalizedDy;
+                
+                // Calculate collision force magnitude for audio
+                const velocityMagnitude = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                const otherVelocityMagnitude = Math.sqrt(other.vx * other.vx + other.vy * other.vy);
+                const totalVelocity = velocityMagnitude + otherVelocityMagnitude;
+                const collisionForce = (separationForce + totalVelocity) * 0.5; // Combined force measure
+                
+                // Record collision event for audio processing
+                const currentTime = performance.now();
+                const collisionEvent = {
+                    time: currentTime,
+                    force: collisionForce,
+                    otherSpecies: other.species,
+                    distance: distance,
+                    relativeVelocity: totalVelocity
+                };
+                
+                // Add collision event to both particles
+                this.collisionEvents.push(collisionEvent);
+                other.collisionEvents.push({
+                    ...collisionEvent,
+                    otherSpecies: this.species
+                });
+                
+                // Update current collision force
+                this.collisionForce = Math.max(this.collisionForce, collisionForce);
+                other.collisionForce = Math.max(other.collisionForce, collisionForce);
+                this.lastCollisionTime = currentTime;
+                other.lastCollisionTime = currentTime;
                 
                 // Apply mutual velocity damping on collision (both particles affected)
                 this.vx *= 0.7;
@@ -314,6 +348,24 @@ class Particle {
         
         // Simple age increment for temporal sorting
         this.age++;
+        
+        // Update collision tracking for audio
+        const currentTime = performance.now();
+        
+        // Remove old collision events (older than 100ms)
+        this.collisionEvents = this.collisionEvents.filter(event => 
+            currentTime - event.time < 100
+        );
+        
+        // Decay collision force over time
+        const timeSinceCollision = currentTime - this.lastCollisionTime;
+        if (timeSinceCollision > 50) { // Start decaying after 50ms
+            const decayFactor = Math.exp(-(timeSinceCollision - 50) / 100); // Exponential decay
+            this.collisionForce *= decayFactor;
+            if (this.collisionForce < 0.01) {
+                this.collisionForce = 0;
+            }
+        }
     }
 }
 

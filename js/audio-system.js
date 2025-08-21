@@ -19,7 +19,302 @@ let audioFadeDuration = 0.05; // Fade duration in seconds for threshold transiti
 // Species audio synthesizers
 let speciesAudioSynths = [];
 
-// Granular Synthesizer Class
+// Audio triggering modes
+const TRIGGER_MODES = {
+    COLLISION: 'collision',
+    LOOPING: 'looping'
+};
+
+// Base Grain Engine class
+class GrainEngine {
+    constructor(speciesIndex, audioContext, masterGain, mode) {
+        this.speciesIndex = speciesIndex;
+        this.audioContext = audioContext;
+        this.masterGain = masterGain;
+        this.mode = mode;
+        
+        // Audio buffer
+        this.audioBuffer = null;
+        
+        // Grain pool for performance
+        this.grains = [];
+        this.maxGrains = 50;
+        
+        // Audio processing parameters
+        this.threshold = 0.1; // Trigger threshold (0-1)
+        this.ratio = 2.0; // Compression ratio (1-10)
+        this.attack = 0.01; // Attack time in seconds
+        this.release = 0.1; // Release time in seconds
+        this.makeupGain = 1.0; // Post-compression gain boost
+        
+        // State tracking
+        this.activeGrains = 0;
+        this.gainReduction = 0; // For visual feedback
+        this.lastUpdate = 0;
+    }
+    
+    // Abstract methods to be implemented by subclasses
+    shouldTrigger(particle) {
+        throw new Error('shouldTrigger must be implemented by subclass');
+    }
+    
+    calculateGain(particle, inputLevel) {
+        // Compressor-style gain calculation
+        if (inputLevel < this.threshold) {
+            return inputLevel * this.makeupGain;
+        }
+        
+        const excessLevel = inputLevel - this.threshold;
+        const compressedExcess = excessLevel / this.ratio;
+        const outputLevel = this.threshold + compressedExcess;
+        
+        this.gainReduction = 1.0 - (outputLevel / inputLevel);
+        return outputLevel * this.makeupGain;
+    }
+    
+    createGrain(particle, gainLevel) {
+        if (!this.audioBuffer || this.grains.length >= this.maxGrains) return null;
+        
+        // Create audio nodes
+        const source = this.audioContext.createBufferSource();
+        const gainNode = this.audioContext.createGain();
+        const filterNode = this.audioContext.createBiquadFilter();
+        const pannerNode = this.audioContext.createStereoPanner();
+        
+        // Setup audio graph
+        source.buffer = this.audioBuffer;
+        source.connect(filterNode);
+        filterNode.connect(gainNode);
+        gainNode.connect(pannerNode);
+        pannerNode.connect(this.masterGain);
+        
+        // Configure filter
+        filterNode.type = 'bandpass';
+        filterNode.Q.value = 2;
+        
+        const grain = {
+            source,
+            gainNode,
+            filterNode,
+            pannerNode,
+            particle,
+            startTime: this.audioContext.currentTime,
+            isPlaying: true,
+            targetGain: gainLevel
+        };
+        
+        // Configure initial parameters
+        this.updateGrainParameters(grain, particle);
+        
+        this.grains.push(grain);
+        return grain;
+    }
+    
+    updateGrainParameters(grain, particle) {
+        // Update audio parameters based on particle state
+        const now = this.audioContext.currentTime;
+        
+        // Calculate frequency and bandwidth from Y position and size
+        const invY = 1 - (particle.y / (typeof canvasHeight !== 'undefined' ? canvasHeight : 800));
+        const logLow = Math.log(frequencyRange.low);
+        const logHigh = Math.log(frequencyRange.high);
+        const frequency = Math.exp(logLow + (invY * (logHigh - logLow)));
+        
+        // Map particle size to filter bandwidth
+        const minSize = 2, maxSize = 10;
+        const normalizedSize = Math.max(0, Math.min(1, (particle.size - minSize) / (maxSize - minSize)));
+        const bandwidth = 12.0 - (normalizedSize * 11.0); // Smaller particles = narrower bands
+        
+        // Set filter parameters
+        grain.filterNode.frequency.setTargetAtTime(frequency, now, 0.01);
+        grain.filterNode.Q.setTargetAtTime(bandwidth, now, 0.01);
+        
+        // Set panning based on X position
+        const pan = (particle.x / (typeof canvasWidth !== 'undefined' ? canvasWidth : 1200)) * 2 - 1;
+        grain.pannerNode.pan.setTargetAtTime(pan, now, 0.01);
+        
+        // Apply gain with attack/release
+        grain.gainNode.gain.setTargetAtTime(grain.targetGain, now, 
+            grain.targetGain > grain.gainNode.gain.value ? this.attack : this.release);
+    }
+    
+    removeGrain(grain) {
+        const index = this.grains.indexOf(grain);
+        if (index !== -1) {
+            grain.isPlaying = false;
+            this.grains.splice(index, 1);
+        }
+    }
+    
+    update(particles) {
+        this.activeGrains = this.grains.length;
+        
+        // Update existing grains
+        for (let i = this.grains.length - 1; i >= 0; i--) {
+            const grain = this.grains[i];
+            if (grain.particle && grain.isPlaying) {
+                this.updateGrainParameters(grain, grain.particle);
+            }
+        }
+    }
+}
+
+// Collision-based grain engine
+class CollisionGrainEngine extends GrainEngine {
+    constructor(speciesIndex, audioContext, masterGain) {
+        super(speciesIndex, audioContext, masterGain, TRIGGER_MODES.COLLISION);
+        
+        // Collision-specific parameters
+        this.collisionSpeciesMatrix = new Array(8).fill(true); // Which species trigger audio
+        this.collisionSensitivity = 1.0; // Multiplier for collision force
+        this.minimumCollisionForce = 0.05; // Minimum force to trigger
+    }
+    
+    shouldTrigger(particle) {
+        if (!particle.collisionEvents || particle.collisionEvents.length === 0) {
+            return false;
+        }
+        
+        // Check recent collisions with enabled species
+        const recentCollisions = particle.collisionEvents.filter(event => 
+            this.collisionSpeciesMatrix[event.otherSpecies] && 
+            event.force * this.collisionSensitivity >= this.minimumCollisionForce
+        );
+        
+        return recentCollisions.length > 0;
+    }
+    
+    update(particles) {
+        super.update(particles);
+        
+        // Find particles of this species
+        const speciesParticles = particles.filter(p => p.species === this.speciesIndex);
+        
+        for (const particle of speciesParticles) {
+            if (this.shouldTrigger(particle)) {
+                // Calculate gain based on collision force
+                const maxForce = Math.max(...particle.collisionEvents.map(e => e.force));
+                const inputLevel = Math.min(1.0, maxForce * this.collisionSensitivity);
+                const gainLevel = this.calculateGain(particle, inputLevel);
+                
+                // Create grain if we don't already have one for this particle
+                const existingGrain = this.grains.find(g => g.particle === particle);
+                if (!existingGrain && gainLevel > 0.01) {
+                    const grain = this.createGrain(particle, gainLevel);
+                    if (grain) {
+                        // Start playback
+                        grain.source.start(this.audioContext.currentTime);
+                        grain.source.stop(this.audioContext.currentTime + 0.2); // 200ms grain
+                        
+                        // Cleanup when finished
+                        grain.source.onended = () => this.removeGrain(grain);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Looping grain engine with crossfading
+class LoopingGrainEngine extends GrainEngine {
+    constructor(speciesIndex, audioContext, masterGain) {
+        super(speciesIndex, audioContext, masterGain, TRIGGER_MODES.LOOPING);
+        
+        // Looping-specific parameters
+        this.loopDirection = 'forward'; // 'forward', 'reverse', 'alternate'
+        this.crossfadeAmount = 0.5; // 0-1, amount of crossfade between grains
+        this.grainDuration = 0.1; // Base grain duration
+        this.grainSpacing = 0.05; // Time between grain starts
+        this.alternateState = 1; // For alternating direction
+        
+        // Per-particle grain scheduling
+        this.particleGrains = new Map(); // particle -> grain info
+    }
+    
+    shouldTrigger(particle) {
+        // Always trigger in looping mode if particle is moving
+        const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+        return velocity > 0.01; // Very low threshold for continuous operation
+    }
+    
+    update(particles) {
+        super.update(particles);
+        
+        const currentTime = this.audioContext.currentTime;
+        const speciesParticles = particles.filter(p => p.species === this.speciesIndex);
+        
+        for (const particle of speciesParticles) {
+            if (this.shouldTrigger(particle)) {
+                const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+                const inputLevel = Math.min(1.0, velocity / 3.0); // Normalize to max velocity
+                const gainLevel = this.calculateGain(particle, inputLevel);
+                
+                if (gainLevel > 0.01) {
+                    // Check if we need to schedule a new grain for this particle
+                    const grainInfo = this.particleGrains.get(particle);
+                    const shouldScheduleNew = !grainInfo || 
+                        (currentTime - grainInfo.lastGrainTime) >= this.grainSpacing;
+                    
+                    if (shouldScheduleNew) {
+                        const grain = this.createLoopingGrain(particle, gainLevel);
+                        if (grain) {
+                            this.particleGrains.set(particle, {
+                                lastGrainTime: currentTime,
+                                currentGrain: grain
+                            });
+                        }
+                    }
+                }
+            } else {
+                // Remove particle from tracking if no longer active
+                this.particleGrains.delete(particle);
+            }
+        }
+    }
+    
+    createLoopingGrain(particle, gainLevel) {
+        if (!this.audioBuffer || this.grains.length >= this.maxGrains) return null;
+        
+        const grain = this.createGrain(particle, gainLevel);
+        if (!grain) return null;
+        
+        // Calculate sample position based on particle X
+        const samplePosition = particle.x / (typeof canvasWidth !== 'undefined' ? canvasWidth : 1200);
+        const startTime = samplePosition * this.audioBuffer.duration;
+        
+        // Determine playback direction and rate
+        let playbackRate = 1.0;
+        let actualStartTime = startTime;
+        
+        if (this.loopDirection === 'reverse') {
+            playbackRate = -1.0;
+        } else if (this.loopDirection === 'alternate') {
+            playbackRate = this.alternateState;
+            this.alternateState *= -1; // Toggle for next grain
+        }
+        
+        // Apply crossfading envelope
+        const fadeTime = this.grainDuration * this.crossfadeAmount * 0.5;
+        const now = this.audioContext.currentTime;
+        
+        grain.gainNode.gain.setValueAtTime(0, now);
+        grain.gainNode.gain.linearRampToValueAtTime(gainLevel, now + fadeTime);
+        grain.gainNode.gain.setValueAtTime(gainLevel, now + this.grainDuration - fadeTime);
+        grain.gainNode.gain.linearRampToValueAtTime(0, now + this.grainDuration);
+        
+        // Start playback
+        grain.source.playbackRate.value = Math.abs(playbackRate);
+        grain.source.start(now, actualStartTime, this.grainDuration);
+        grain.source.stop(now + this.grainDuration);
+        
+        // Cleanup when finished
+        grain.source.onended = () => this.removeGrain(grain);
+        
+        return grain;
+    }
+}
+
+// Enhanced Granular Synthesizer Class with dual engine support
 class GranularSynth {
     constructor(speciesIndex, audioContext, masterGain) {
         this.speciesIndex = speciesIndex;
@@ -41,16 +336,14 @@ class GranularSynth {
         this.sampleStart = 0.0; // Start position in sample (0-1)
         this.sampleEnd = 1.0;   // End position in sample (0-1)
         
-        // Grain management
-        this.grains = [];
-        this.maxGrains = 50;
-        this.grainDuration = 0.1; // Default 100ms
+        // Trigger mode and engines
+        this.triggerMode = TRIGGER_MODES.LOOPING; // Default to looping mode
+        this.collisionEngine = null;
+        this.loopingEngine = null;
+        this.currentEngine = null;
         
-        // Grain loop mode: 'forward', 'reverse', 'alternate'
+        // Legacy parameters (maintained for compatibility)
         this.loopMode = 'forward';
-        this.alternateDirection = 1; // 1 for forward, -1 for reverse
-        
-        // Audio parameters
         this.pitch = 0; // Semitones (0-24)
         this.detune = 0; // Cents (0-50, randomized per grain)
         this.fadeLength = 0.002; // Crossfade length (1ms-20ms)
@@ -60,11 +353,21 @@ class GranularSynth {
         this.volume = 0.7;
         this.activeGrains = 0;
         
-        // Performance tracking
-        this.lastUpdate = 0;
-        this.updateInterval = 16; // ~60fps
+        // Initialize engines
+        this.initializeEngines();
         
-        console.log(`🎵 Granular synth created for Species ${String.fromCharCode(65 + speciesIndex)}`);
+        console.log(`🎵 Enhanced granular synth created for Species ${String.fromCharCode(65 + speciesIndex)}`);
+    }
+    
+    initializeEngines() {
+        if (!this.audioContext || !this.gainNode) return;
+        
+        this.collisionEngine = new CollisionGrainEngine(this.speciesIndex, this.audioContext, this.gainNode);
+        this.loopingEngine = new LoopingGrainEngine(this.speciesIndex, this.audioContext, this.gainNode);
+        
+        // Set current engine based on mode
+        this.currentEngine = this.triggerMode === TRIGGER_MODES.COLLISION ? 
+            this.collisionEngine : this.loopingEngine;
     }
     
     // Connect audio graph when context becomes available
@@ -77,6 +380,9 @@ class GranularSynth {
             this.gainNode.connect(masterGain);
             this.gainNode.gain.value = this.volume || 0.7;
         }
+        
+        // Initialize engines with new context
+        this.initializeEngines();
     }
     
     // Load audio sample
@@ -110,6 +416,11 @@ class GranularSynth {
             
             // Decode immediately if audio context exists and is running
             this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            // Share audio buffer with engines
+            if (this.collisionEngine) this.collisionEngine.audioBuffer = this.audioBuffer;
+            if (this.loopingEngine) this.loopingEngine.audioBuffer = this.audioBuffer;
+            
             console.log(`🎵 Sample loaded for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
             return true;
         } catch (error) {
@@ -126,6 +437,11 @@ class GranularSynth {
                 // This ensures the audioBuffer is compatible with the main audio system
                 this.audioBuffer = await this.audioContext.decodeAudioData(this.rawAudioData);
                 this.rawAudioData = null; // Clear raw data after decoding
+                
+                // Share audio buffer with engines
+                if (this.collisionEngine) this.collisionEngine.audioBuffer = this.audioBuffer;
+                if (this.loopingEngine) this.loopingEngine.audioBuffer = this.audioBuffer;
+                
                 console.log(`🎵 Re-decoded sample for audio system for Species ${String.fromCharCode(65 + this.speciesIndex)}: ${this.audioBuffer.duration.toFixed(2)}s`);
                 return true;
             } catch (error) {
@@ -136,8 +452,77 @@ class GranularSynth {
         return false;
     }
     
-    // Create and manage audio grain with crossfading
+    // Set trigger mode (collision or looping)
+    setTriggerMode(mode) {
+        this.triggerMode = mode;
+        this.currentEngine = mode === TRIGGER_MODES.COLLISION ? 
+            this.collisionEngine : this.loopingEngine;
+        
+        // Share audio buffer with new engine
+        if (this.currentEngine && this.audioBuffer) {
+            this.currentEngine.audioBuffer = this.audioBuffer;
+        }
+        
+        console.log(`🎵 Species ${String.fromCharCode(65 + this.speciesIndex)} trigger mode: ${mode}`);
+    }
+    
+    // Get current engine settings for UI
+    getEngineSettings() {
+        if (!this.currentEngine) return {};
+        
+        return {
+            threshold: this.currentEngine.threshold,
+            ratio: this.currentEngine.ratio,
+            attack: this.currentEngine.attack,
+            release: this.currentEngine.release,
+            makeupGain: this.currentEngine.makeupGain,
+            gainReduction: this.currentEngine.gainReduction,
+            // Mode-specific settings
+            ...(this.triggerMode === TRIGGER_MODES.COLLISION ? {
+                collisionSpeciesMatrix: this.collisionEngine.collisionSpeciesMatrix,
+                collisionSensitivity: this.collisionEngine.collisionSensitivity,
+                minimumCollisionForce: this.collisionEngine.minimumCollisionForce
+            } : {
+                loopDirection: this.loopingEngine.loopDirection,
+                crossfadeAmount: this.loopingEngine.crossfadeAmount,
+                grainDuration: this.loopingEngine.grainDuration,
+                grainSpacing: this.loopingEngine.grainSpacing
+            })
+        };
+    }
+    
+    // Update engine settings from UI
+    updateEngineSettings(settings) {
+        if (!this.currentEngine) return;
+        
+        // Update common settings
+        if (settings.threshold !== undefined) this.currentEngine.threshold = settings.threshold;
+        if (settings.ratio !== undefined) this.currentEngine.ratio = settings.ratio;
+        if (settings.attack !== undefined) this.currentEngine.attack = settings.attack;
+        if (settings.release !== undefined) this.currentEngine.release = settings.release;
+        if (settings.makeupGain !== undefined) this.currentEngine.makeupGain = settings.makeupGain;
+        
+        // Update mode-specific settings
+        if (this.triggerMode === TRIGGER_MODES.COLLISION && this.collisionEngine) {
+            if (settings.collisionSpeciesMatrix) this.collisionEngine.collisionSpeciesMatrix = settings.collisionSpeciesMatrix;
+            if (settings.collisionSensitivity !== undefined) this.collisionEngine.collisionSensitivity = settings.collisionSensitivity;
+            if (settings.minimumCollisionForce !== undefined) this.collisionEngine.minimumCollisionForce = settings.minimumCollisionForce;
+        } else if (this.triggerMode === TRIGGER_MODES.LOOPING && this.loopingEngine) {
+            if (settings.loopDirection) this.loopingEngine.loopDirection = settings.loopDirection;
+            if (settings.crossfadeAmount !== undefined) this.loopingEngine.crossfadeAmount = settings.crossfadeAmount;
+            if (settings.grainDuration !== undefined) this.loopingEngine.grainDuration = settings.grainDuration;
+            if (settings.grainSpacing !== undefined) this.loopingEngine.grainSpacing = settings.grainSpacing;
+        }
+    }
+    
+    // Create and manage audio grain with crossfading (legacy method - now uses engines)
     createGrain(particle) {
+        // Delegate to current engine
+        return this.currentEngine ? this.currentEngine.createGrain(particle, 0.5) : null;
+    }
+    
+    // Legacy create grain method (for backwards compatibility)
+    createGrainLegacy(particle) {
         if (!this.audioBuffer || this.isMuted || !isAudioEnabled) return null;
         if (this.grains.length >= this.maxGrains) return null;
         
@@ -374,31 +759,16 @@ class GranularSynth {
         return minDuration + (speciesTrailLength * (maxDuration - minDuration));
     }
     
-    // Update all grains for this species
+    // Update all grains for this species (now uses engine system)
     update(particles) {
-        const now = performance.now();
-        if (now - this.lastUpdate < this.updateInterval) return;
-        
-        this.lastUpdate = now;
-        this.activeGrains = this.grains.length;
-        
-        // Update existing grains with their particles
-        for (let i = this.grains.length - 1; i >= 0; i--) {
-            const grain = this.grains[i];
-            if (grain.particle && grain.isPlaying) {
-                this.updateGrain(grain, grain.particle);
-            }
+        if (!this.currentEngine || this.isMuted || !isAudioEnabled) {
+            this.activeGrains = 0;
+            return;
         }
         
-        // Create new grains for particles that don't have them
-        const speciesParticles = particles.filter(p => p.species === this.speciesIndex);
-        const particlesWithGrains = new Set(this.grains.map(g => g.particle));
-        
-        for (let particle of speciesParticles) {
-            if (!particlesWithGrains.has(particle) && this.grains.length < this.maxGrains) {
-                this.createGrain(particle);
-            }
-        }
+        // Update current engine
+        this.currentEngine.update(particles);
+        this.activeGrains = this.currentEngine.activeGrains;
     }
     
     // Set volume
@@ -422,12 +792,34 @@ class GranularSynth {
     
     // Stop all grains
     stopAll() {
-        for (let grain of this.grains) {
-            if (grain.source && grain.isPlaying) {
-                grain.source.stop();
+        if (this.collisionEngine) {
+            for (let grain of this.collisionEngine.grains) {
+                if (grain.source && grain.isPlaying) {
+                    grain.source.stop();
+                }
             }
+            this.collisionEngine.grains = [];
         }
-        this.grains = [];
+        
+        if (this.loopingEngine) {
+            for (let grain of this.loopingEngine.grains) {
+                if (grain.source && grain.isPlaying) {
+                    grain.source.stop();
+                }
+            }
+            this.loopingEngine.grains = [];
+            this.loopingEngine.particleGrains.clear();
+        }
+    }
+    
+    // Legacy compatibility - expose grains property
+    get grains() {
+        return this.currentEngine ? this.currentEngine.grains : [];
+    }
+    
+    // Legacy compatibility - expose maxGrains property
+    get maxGrains() {
+        return this.currentEngine ? this.currentEngine.maxGrains : 50;
     }
 }
 
@@ -1134,6 +1526,51 @@ function createSpeciesAudioControls() {
     // Setup waveform selection handlers
     setupWaveformSelection(waveformCanvas, i);
     
+    // Trigger Mode Selector
+    const triggerModeRow = document.createElement('div');
+    triggerModeRow.className = 'audio-controls-row';
+    triggerModeRow.style.marginBottom = '12px';
+    
+    const triggerLabel = document.createElement('span');
+    triggerLabel.textContent = 'Trigger:';
+    triggerLabel.style.minWidth = '50px';
+    triggerLabel.style.fontSize = '12px';
+    triggerLabel.style.color = '#ccc';
+    
+    const triggerModeControls = document.createElement('div');
+    triggerModeControls.style.display = 'flex';
+    triggerModeControls.style.gap = '4px';
+    triggerModeControls.style.flex = '1';
+    
+    const currentTriggerMode = (synth && synth.triggerMode) || TRIGGER_MODES.LOOPING;
+    
+    // Collision mode button
+    const collisionBtn = document.createElement('button');
+    collisionBtn.className = 'loop-button';
+    collisionBtn.textContent = '✨';
+    collisionBtn.title = 'Collision Triggered';
+    if (currentTriggerMode === TRIGGER_MODES.COLLISION) collisionBtn.classList.add('active');
+    collisionBtn.addEventListener('click', () => {
+        setSpeciesTriggerMode(i, TRIGGER_MODES.COLLISION);
+        updateTriggerModeUI(i);
+    });
+    
+    // Looping mode button
+    const loopingBtn = document.createElement('button');
+    loopingBtn.className = 'loop-button';
+    loopingBtn.textContent = '🔁';
+    loopingBtn.title = 'Continuous Looping';
+    if (currentTriggerMode === TRIGGER_MODES.LOOPING) loopingBtn.classList.add('active');
+    loopingBtn.addEventListener('click', () => {
+        setSpeciesTriggerMode(i, TRIGGER_MODES.LOOPING);
+        updateTriggerModeUI(i);
+    });
+    
+    triggerModeControls.appendChild(collisionBtn);
+    triggerModeControls.appendChild(loopingBtn);
+    triggerModeRow.appendChild(triggerLabel);
+    triggerModeRow.appendChild(triggerModeControls);
+    
     // Volume control
     const volumeRow = document.createElement('div');
     volumeRow.className = 'audio-controls-row';
@@ -1164,50 +1601,79 @@ function createSpeciesAudioControls() {
     volumeRow.appendChild(volumeSlider);
     volumeRow.appendChild(volumeValue);
     
-    // Loop Mode Controls
-    const loopRow = document.createElement('div');
-    loopRow.className = 'audio-controls-row';
-    loopRow.style.marginBottom = '8px';
+    // Compressor-style gain controls
+    const gainControlsContainer = document.createElement('div');
+    gainControlsContainer.id = `gainControls${i}`;
     
-    const loopLabel = document.createElement('span');
-    loopLabel.textContent = 'Loop:';
-    loopLabel.style.minWidth = '50px';
-    loopLabel.style.fontSize = '12px';
-    loopLabel.style.color = '#ccc';
+    // Threshold control
+    const thresholdRow = document.createElement('div');
+    thresholdRow.className = 'audio-controls-row';
     
-    const loopControls = document.createElement('div');
-    loopControls.className = 'loop-controls';
+    const thresholdLabel = document.createElement('span');
+    thresholdLabel.textContent = 'Threshold:';
+    thresholdLabel.style.minWidth = '50px';
+    thresholdLabel.style.fontSize = '12px';
     
-    // Forward button
-    const forwardBtn = document.createElement('button');
-    forwardBtn.className = 'loop-button';
-    if (!synth || synth.loopMode === 'forward') forwardBtn.classList.add('active');
-    forwardBtn.textContent = '▶';
-    forwardBtn.title = 'Forward Loop';
-    forwardBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'forward'));
+    const thresholdSlider = document.createElement('input');
+    thresholdSlider.type = 'range';
+    thresholdSlider.className = 'slider';
+    thresholdSlider.id = `speciesThreshold${i}`;
+    thresholdSlider.min = '0.01';
+    thresholdSlider.max = '1.0';
+    thresholdSlider.step = '0.01';
+    thresholdSlider.value = '0.1';
+    thresholdSlider.style.flex = '1';
+    thresholdSlider.addEventListener('input', (e) => updateEngineParameter(i, 'threshold', parseFloat(e.target.value)));
     
-    // Reverse button
-    const reverseBtn = document.createElement('button');
-    reverseBtn.className = 'loop-button';
-    if (synth && synth.loopMode === 'reverse') reverseBtn.classList.add('active');
-    reverseBtn.textContent = '◀';
-    reverseBtn.title = 'Reverse Loop';
-    reverseBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'reverse'));
+    const thresholdValue = document.createElement('span');
+    thresholdValue.className = 'value-display';
+    thresholdValue.id = `speciesThreshold${i}-value`;
+    thresholdValue.textContent = '0.10';
     
-    // Alternate button
-    const alternateBtn = document.createElement('button');
-    alternateBtn.className = 'loop-button';
-    if (synth && synth.loopMode === 'alternate') alternateBtn.classList.add('active');
-    alternateBtn.textContent = '⇄';
-    alternateBtn.title = 'Alternate Loop';
-    alternateBtn.addEventListener('click', () => setSpeciesLoopMode(i, 'alternate'));
+    thresholdRow.appendChild(thresholdLabel);
+    thresholdRow.appendChild(thresholdSlider);
+    thresholdRow.appendChild(thresholdValue);
     
-    loopControls.appendChild(forwardBtn);
-    loopControls.appendChild(reverseBtn);
-    loopControls.appendChild(alternateBtn);
+    // Ratio control
+    const ratioRow = document.createElement('div');
+    ratioRow.className = 'audio-controls-row';
     
-    loopRow.appendChild(loopLabel);
-    loopRow.appendChild(loopControls);
+    const ratioLabel = document.createElement('span');
+    ratioLabel.textContent = 'Ratio:';
+    ratioLabel.style.minWidth = '50px';
+    ratioLabel.style.fontSize = '12px';
+    
+    const ratioSlider = document.createElement('input');
+    ratioSlider.type = 'range';
+    ratioSlider.className = 'slider';
+    ratioSlider.id = `speciesRatio${i}`;
+    ratioSlider.min = '1.0';
+    ratioSlider.max = '10.0';
+    ratioSlider.step = '0.1';
+    ratioSlider.value = '2.0';
+    ratioSlider.style.flex = '1';
+    ratioSlider.addEventListener('input', (e) => updateEngineParameter(i, 'ratio', parseFloat(e.target.value)));
+    
+    const ratioValue = document.createElement('span');
+    ratioValue.className = 'value-display';
+    ratioValue.id = `speciesRatio${i}-value`;
+    ratioValue.textContent = '2.0:1';
+    
+    ratioRow.appendChild(ratioLabel);
+    ratioRow.appendChild(ratioSlider);
+    ratioRow.appendChild(ratioValue);
+    
+    gainControlsContainer.appendChild(thresholdRow);
+    gainControlsContainer.appendChild(ratioRow);
+    
+    // Mode-specific controls container
+    const modeSpecificContainer = document.createElement('div');
+    modeSpecificContainer.id = `modeSpecific${i}`;
+    
+    // Create initial mode-specific controls
+    createModeSpecificControls(modeSpecificContainer, i, currentTriggerMode);
+    
+    // Legacy loop controls moved to mode-specific section
     
     // Pitch control
     const pitchRow = document.createElement('div');
@@ -1344,14 +1810,47 @@ function createSpeciesAudioControls() {
     activityRow.appendChild(grainActivity);
     activityRow.appendChild(audioMeter);
     
+    // Gain reduction meter
+    const gainReductionRow = document.createElement('div');
+    gainReductionRow.className = 'audio-controls-row';
+    
+    const gainReductionLabel = document.createElement('span');
+    gainReductionLabel.textContent = 'Gain Red:';
+    gainReductionLabel.style.minWidth = '50px';
+    gainReductionLabel.style.fontSize = '12px';
+    
+    const gainReductionMeter = document.createElement('div');
+    gainReductionMeter.className = 'meter-bar';
+    gainReductionMeter.style.flex = '1';
+    
+    const gainReductionFill = document.createElement('div');
+    gainReductionFill.className = 'meter-fill';
+    gainReductionFill.id = `gainReduction${i}`;
+    gainReductionFill.style.background = 'linear-gradient(to right, #4CAF50, #FFC107, #FF5722)';
+    gainReductionFill.style.width = '0%';
+    
+    gainReductionMeter.appendChild(gainReductionFill);
+    
+    const gainReductionValue = document.createElement('span');
+    gainReductionValue.className = 'value-display';
+    gainReductionValue.id = `gainReduction${i}-value`;
+    gainReductionValue.textContent = '0dB';
+    
+    gainReductionRow.appendChild(gainReductionLabel);
+    gainReductionRow.appendChild(gainReductionMeter);
+    gainReductionRow.appendChild(gainReductionValue);
+    
     // Assemble panel
     panel.appendChild(speciesParamsHeader);
     panel.appendChild(speciesParamsRow);
     panel.appendChild(header);
     panel.appendChild(fileControls);
     panel.appendChild(waveformContainer);
+    panel.appendChild(triggerModeRow);
     panel.appendChild(volumeRow);
-    panel.appendChild(loopRow);
+    panel.appendChild(gainControlsContainer);
+    panel.appendChild(modeSpecificContainer);
+    panel.appendChild(gainReductionRow);
     panel.appendChild(pitchRow);
     panel.appendChild(detuneRow);
     panel.appendChild(fadeRow);
@@ -1368,6 +1867,218 @@ function createSpeciesAudioControls() {
     if (typeof setupDraggableNumbers === 'function') {
         setTimeout(() => setupDraggableNumbers(), 0);
     }
+}
+
+// Set species trigger mode
+function setSpeciesTriggerMode(speciesIndex, mode) {
+    if (!speciesAudioSynths[speciesIndex]) return;
+    
+    const synth = speciesAudioSynths[speciesIndex];
+    synth.setTriggerMode(mode);
+    
+    console.log(`🎵 Species ${String.fromCharCode(65 + speciesIndex)} trigger mode: ${mode}`);
+}
+
+// Update engine parameter
+function updateEngineParameter(speciesIndex, parameter, value) {
+    if (!speciesAudioSynths[speciesIndex]) return;
+    
+    const synth = speciesAudioSynths[speciesIndex];
+    const settings = {};
+    settings[parameter] = value;
+    synth.updateEngineSettings(settings);
+    
+    // Update UI display
+    const valueElement = document.getElementById(`species${parameter.charAt(0).toUpperCase() + parameter.slice(1)}${speciesIndex}-value`);
+    if (valueElement) {
+        if (parameter === 'ratio') {
+            valueElement.textContent = `${value.toFixed(1)}:1`;
+        } else {
+            valueElement.textContent = value.toFixed(2);
+        }
+    }
+}
+
+// Update trigger mode UI
+function updateTriggerModeUI(speciesIndex) {
+    const modeSpecificContainer = document.getElementById(`modeSpecific${speciesIndex}`);
+    if (!modeSpecificContainer || !speciesAudioSynths[speciesIndex]) return;
+    
+    const synth = speciesAudioSynths[speciesIndex];
+    createModeSpecificControls(modeSpecificContainer, speciesIndex, synth.triggerMode);
+}
+
+// Create mode-specific controls
+function createModeSpecificControls(container, speciesIndex, triggerMode) {
+    container.innerHTML = '';
+    
+    if (triggerMode === TRIGGER_MODES.COLLISION) {
+        createCollisionControls(container, speciesIndex);
+    } else {
+        createLoopingControls(container, speciesIndex);
+    }
+}
+
+// Create collision mode controls
+function createCollisionControls(container, speciesIndex) {
+    // Species collision matrix
+    const matrixHeader = document.createElement('div');
+    matrixHeader.style.fontSize = '12px';
+    matrixHeader.style.color = '#ccc';
+    matrixHeader.style.marginBottom = '8px';
+    matrixHeader.textContent = 'Collision Triggers:';
+    
+    const matrixContainer = document.createElement('div');
+    matrixContainer.style.display = 'grid';
+    matrixContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
+    matrixContainer.style.gap = '4px';
+    matrixContainer.style.marginBottom = '12px';
+    
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
+    
+    for (let i = 0; i < Math.min(currentSpeciesCount, 8); i++) {
+        const checkboxContainer = document.createElement('label');
+        checkboxContainer.style.display = 'flex';
+        checkboxContainer.style.alignItems = 'center';
+        checkboxContainer.style.gap = '4px';
+        checkboxContainer.style.fontSize = '11px';
+        checkboxContainer.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true; // Default: all species can trigger
+        checkbox.addEventListener('change', (e) => {
+            updateCollisionMatrix(speciesIndex, i, e.target.checked);
+        });
+        
+        const label = document.createElement('span');
+        label.textContent = String.fromCharCode(65 + i);
+        
+        checkboxContainer.appendChild(checkbox);
+        checkboxContainer.appendChild(label);
+        matrixContainer.appendChild(checkboxContainer);
+    }
+    
+    // Collision sensitivity
+    const sensitivityRow = document.createElement('div');
+    sensitivityRow.className = 'audio-controls-row';
+    
+    const sensitivityLabel = document.createElement('span');
+    sensitivityLabel.textContent = 'Sensitivity:';
+    sensitivityLabel.style.minWidth = '50px';
+    sensitivityLabel.style.fontSize = '12px';
+    
+    const sensitivitySlider = document.createElement('input');
+    sensitivitySlider.type = 'range';
+    sensitivitySlider.className = 'slider';
+    sensitivitySlider.min = '0.1';
+    sensitivitySlider.max = '5.0';
+    sensitivitySlider.step = '0.1';
+    sensitivitySlider.value = '1.0';
+    sensitivitySlider.style.flex = '1';
+    sensitivitySlider.addEventListener('input', (e) => {
+        updateEngineParameter(speciesIndex, 'collisionSensitivity', parseFloat(e.target.value));
+        document.getElementById(`collisionSensitivity${speciesIndex}-value`).textContent = `${parseFloat(e.target.value).toFixed(1)}x`;
+    });
+    
+    const sensitivityValue = document.createElement('span');
+    sensitivityValue.className = 'value-display';
+    sensitivityValue.id = `collisionSensitivity${speciesIndex}-value`;
+    sensitivityValue.textContent = '1.0x';
+    
+    sensitivityRow.appendChild(sensitivityLabel);
+    sensitivityRow.appendChild(sensitivitySlider);
+    sensitivityRow.appendChild(sensitivityValue);
+    
+    container.appendChild(matrixHeader);
+    container.appendChild(matrixContainer);
+    container.appendChild(sensitivityRow);
+}
+
+// Create looping mode controls
+function createLoopingControls(container, speciesIndex) {
+    // Loop direction controls
+    const loopRow = document.createElement('div');
+    loopRow.className = 'audio-controls-row';
+    loopRow.style.marginBottom = '8px';
+    
+    const loopLabel = document.createElement('span');
+    loopLabel.textContent = 'Direction:';
+    loopLabel.style.minWidth = '50px';
+    loopLabel.style.fontSize = '12px';
+    loopLabel.style.color = '#ccc';
+    
+    const loopControls = document.createElement('div');
+    loopControls.className = 'loop-controls';
+    
+    const directions = [
+        { mode: 'forward', icon: '▶', title: 'Forward' },
+        { mode: 'reverse', icon: '◀', title: 'Reverse' },
+        { mode: 'alternate', icon: '⇄', title: 'Alternating' }
+    ];
+    
+    directions.forEach(dir => {
+        const btn = document.createElement('button');
+        btn.className = 'loop-button';
+        btn.textContent = dir.icon;
+        btn.title = dir.title;
+        if (dir.mode === 'forward') btn.classList.add('active'); // Default
+        btn.addEventListener('click', () => {
+            updateEngineParameter(speciesIndex, 'loopDirection', dir.mode);
+            // Update button states
+            loopControls.querySelectorAll('.loop-button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+        loopControls.appendChild(btn);
+    });
+    
+    loopRow.appendChild(loopLabel);
+    loopRow.appendChild(loopControls);
+    
+    // Crossfade amount
+    const crossfadeRow = document.createElement('div');
+    crossfadeRow.className = 'audio-controls-row';
+    
+    const crossfadeLabel = document.createElement('span');
+    crossfadeLabel.textContent = 'Crossfade:';
+    crossfadeLabel.style.minWidth = '50px';
+    crossfadeLabel.style.fontSize = '12px';
+    
+    const crossfadeSlider = document.createElement('input');
+    crossfadeSlider.type = 'range';
+    crossfadeSlider.className = 'slider';
+    crossfadeSlider.min = '0.0';
+    crossfadeSlider.max = '1.0';
+    crossfadeSlider.step = '0.05';
+    crossfadeSlider.value = '0.5';
+    crossfadeSlider.style.flex = '1';
+    crossfadeSlider.addEventListener('input', (e) => {
+        updateEngineParameter(speciesIndex, 'crossfadeAmount', parseFloat(e.target.value));
+        document.getElementById(`crossfade${speciesIndex}-value`).textContent = `${Math.round(parseFloat(e.target.value) * 100)}%`;
+    });
+    
+    const crossfadeValue = document.createElement('span');
+    crossfadeValue.className = 'value-display';
+    crossfadeValue.id = `crossfade${speciesIndex}-value`;
+    crossfadeValue.textContent = '50%';
+    
+    crossfadeRow.appendChild(crossfadeLabel);
+    crossfadeRow.appendChild(crossfadeSlider);
+    crossfadeRow.appendChild(crossfadeValue);
+    
+    container.appendChild(loopRow);
+    container.appendChild(crossfadeRow);
+}
+
+// Update collision matrix
+function updateCollisionMatrix(speciesIndex, triggerSpecies, enabled) {
+    if (!speciesAudioSynths[speciesIndex] || !speciesAudioSynths[speciesIndex].collisionEngine) return;
+    
+    const engine = speciesAudioSynths[speciesIndex].collisionEngine;
+    engine.collisionSpeciesMatrix[triggerSpecies] = enabled;
+    
+    console.log(`🎵 Species ${String.fromCharCode(65 + speciesIndex)} collision trigger from ${String.fromCharCode(65 + triggerSpecies)}: ${enabled}`);
 }
 
 // Update audio UI indicators - defined globally
@@ -1399,6 +2110,16 @@ function updateAudioUI() {
         if (meterFill) {
             const level = Math.min(100, (grainCount / synth.maxGrains) * 100);
             meterFill.style.width = `${level}%`;
+        }
+        
+        // Update gain reduction meter
+        const gainReductionFill = document.getElementById(`gainReduction${i}`);
+        const gainReductionValue = document.getElementById(`gainReduction${i}-value`);
+        if (gainReductionFill && gainReductionValue && synth.currentEngine) {
+            const gainReduction = synth.currentEngine.gainReduction || 0;
+            const reductionPercent = Math.min(100, gainReduction * 100);
+            gainReductionFill.style.width = `${reductionPercent}%`;
+            gainReductionValue.textContent = `${(gainReduction * -20).toFixed(1)}dB`; // Convert to dB
         }
     }
 }
