@@ -32,20 +32,25 @@
 ### js/audio-system.js  
 | Component | Purpose |
 |-----------|---------|
-| **GranularSynth Class** | Core audio synthesis engine |
-| **Audio Controls** | Volume, mute, frequency range management |
-| **Waveform System** | Sample loading, selection, visualization |
-| **Grain Management** | Loop modes, pitch, detune, crossfading |
-| **UI Generation** | Dynamic per-species audio controls |
+| **Dual-Engine Architecture** | CollisionGrainEngine & LoopingGrainEngine classes |
+| **Base GrainEngine Class** | Smoothed threshold system with soft boundaries |
+| **Advanced Triggering** | Collision detection & continuous looping modes |
+| **Species Audio Matrix** | Configurable inter-species collision triggers |
+| **Threshold Visualization** | Interactive drag-based threshold control with smoothing ramp |
+| **Smoothing System** | Soft threshold boundaries for natural audio transitions |
+| **Real-time Audio Processing** | Particle-driven granular synthesis with compression-style controls |
+| **UI Generation** | Mode-specific tabbed audio controls (Collision/Looping) |
 
 ### js/physics-core.js
 | Component | Purpose |
 |-----------|---------|
-| **SpatialGrid Class** | O(N) collision optimization |
-| **Particle Class** | Physics simulation, movement |
+| **Enhanced Particle Class** | Physics simulation with collision event tracking for audio |
+| **Collision Event System** | Real-time collision force recording and decay for audio triggering |
+| **SpatialGrid Class** | O(N) collision optimization with force magnitude calculation |
+| **Species Activity Tracking** | Real-time velocity and collision monitoring for audio visualization |
 | **TrailParticle Class** | Visual-only trail particles for temporal rendering |
 | **Trail Particle System** | Separate trail particles with individual species control |
-| **Animation Loop** | Render cycle, FPS tracking |
+| **Animation Loop** | Render cycle, FPS tracking, and audio activity level updates |
 | **Render Pipeline** | Temporal priority rendering with pure colors |
 
 ## Critical IDs & Classes
@@ -54,13 +59,15 @@
 - `canvas` - Main 2D rendering surface (centered)
 - `physics-panel` - Physics & Simulation tab panel
 - `audio-panel` - Audio Engine tab panel
-- `speciesCount` - Controls number of particle species (Physics tab)
+- `speciesCount` - Controls number of particle species (Audio tab - moved from Physics)
 - `forceMatrix` - Interactive force relationship grid (Physics tab)
 - `particleSettings` - Dynamic species parameter controls (Audio tab)
 - `speciesAudioControls` - Dynamic audio synthesis panels (Audio tab)
 - `masterVolume` - Master audio volume control (Audio tab)
 - `canvas-width` / `canvas-height` - Canvas dimension controls (Physics tab)
 - `audioInit` - Audio system initialization button (Audio tab)
+- `performanceMetrics` - Floating performance metrics display (top right)
+- `keyboardShortcuts` - Persistent keyboard shortcuts display (bottom right)
 
 ### Key Classes
 - `.tab-header` - Top navigation with tab buttons
@@ -72,24 +79,35 @@
 - `.species-audio-panel` - Per-species audio controls
 - `.slider` / `.slider-container` - Range input controls
 - `.draggable-number` - Interactive numeric parameters
+- `.species-audio-status` - Clickable mute/unmute indicators in species tabs
+- `.performance-metrics` - Floating metrics panel styling
+- `.keyboard-shortcuts` - Persistent shortcuts panel styling
 
 ## Development Workflows (Modular)
 
 ### Audio System Development
 **Target File:** `js/audio-system.js`
 ```
-Search: "GranularSynth" → Class definition
-Search: "audioBuffer" → Sample handling  
-Search: "grain" → Granular synthesis logic
-Search: "createSpeciesAudioControls" → UI generation
+Search: "CollisionGrainEngine" → Collision-based audio triggering
+Search: "LoopingGrainEngine" → Continuous looping audio mode
+Search: "GrainEngine" → Base audio engine class with smoothing
+Search: "smoothing" → Soft threshold boundary system
+Search: "calculateGain" → Audio gain calculation with smoothing curves
+Search: "createSpeciesAudioControls" → Tabbed UI generation (Collision/Looping)
+Search: "createSmoothingDial" → Threshold smoothing control
+Search: "setupThresholdDragInteraction" → Interactive threshold visualization
+Search: "updateSmoothingVisualization" → Real-time smoothing ramp display
 ```
 
 ### Physics & Simulation  
 **Target File:** `js/physics-core.js`
 ```
-Search: "Particle" → Particle class definition
-Search: "SpatialGrid" → Collision optimization
-Search: "update()" → Physics update logic
+Search: "Particle" → Enhanced particle class with collision events
+Search: "collisionEvents" → Audio-integrated collision tracking system
+Search: "collisionForce" → Force magnitude calculation for audio
+Search: "SpatialGrid" → Collision optimization with audio integration
+Search: "updateSpeciesActivityLevels" → Real-time activity monitoring for audio
+Search: "update()" → Physics update logic with audio event recording
 Search: "TrailParticle" → Trail particle class definition
 Search: "updateTrailParticles" → Trail particle lifecycle management
 Search: "render()" → Temporal priority rendering pipeline
@@ -221,15 +239,54 @@ Project Root/
 ### Tab Structure
 | Tab | Content | Purpose |
 |-----|---------|---------|
-| **Physics & Simulation** | Species config, Force Matrix, Physics settings | Particle behavior control |
-| **Audio Engine** | Species audio config, Master controls, Granular synth | Sound generation control |
+| **Physics & Simulation** | Force Matrix, Physics settings, Canvas controls | Particle behavior control |
+| **Audio Engine** | Species count, Species audio config, Master controls, Granular synth | Sound generation control |
+
+### Interface Updates (2024)
+- **Species Count Control** → Moved from Physics tab to Audio Engine tab for workflow efficiency
+- **Performance Metrics** → Relocated from Physics tab to floating top-right panel showing: FPS, Canvas, Particle Count, Audio grains, Audio Latency
+- **Keyboard Shortcuts** → Changed from H-key popup to persistent bottom-right panel with hide/show functionality
+- **Species Mute Controls** → Enhanced species tabs with clickable status lights (green=unmuted, red=muted), removed speaker emoji buttons
+- **Streamlined Audio Controls** → Cleaner species audio panels without redundant mute buttons
+
+## Advanced Audio Engine Architecture (2024 Update)
+
+### Dual-Engine System
+| Engine Type | Triggering Method | Best Use Cases |
+|-------------|------------------|----------------|
+| **CollisionGrainEngine** | Collision force detection | Percussive sounds, impact-based audio |
+| **LoopingGrainEngine** | Velocity-based continuous | Ambient textures, flowing soundscapes |
+
+### Threshold & Smoothing System
+- **Hard Threshold** (smoothing = 0.0) → Traditional on/off behavior
+- **Soft Threshold** (smoothing > 0.0) → Gradual fade boundaries
+- **Visual Integration** → Interactive drag threshold with smoothing ramp visualization
+- **Real-time Feedback** → Activity bars show particle behavior relative to threshold
+
+### Smart Audio Processing
+| Parameter | Purpose | Range |
+|-----------|---------|-------|
+| **Threshold** | Trigger point for audio activation | 0.0-1.0 |
+| **Smoothing** | Soft boundary width around threshold | 0.0-1.0 |
+| **Collision Matrix** | Species-specific collision triggers | Boolean grid |
+| **Activity Tracking** | Real-time velocity/collision monitoring | Normalized 0-1 |
+
+### Collision Event System
+- **Force Tracking** → Real-time collision force recording with decay
+- **Species Matrix** → Configurable inter-species audio triggers  
+- **Event Filtering** → Threshold-based collision significance detection
+- **Visual Feedback** → Collision pulse visualization for debugging
+
+### Threshold Visualization Interface
+- **Drag-based Control** → Interactive threshold positioning
+- **Smoothing Ramp** → Visual representation of soft boundary extent
+- **Activity Overlay** → Real-time particle behavior visualization
+- **Responsive Design** → Container-fitted layout with proper spacing
 
 ### Current Audio Parameter Mappings
 - **X Position** → Stereo panning (-1 to +1)
 - **Y Position** → Filter frequency (logarithmic, 80Hz-8kHz default)
-- **Velocity** → Grain amplitude (with velocity threshold & curve)
+- **Velocity/Collision Force** → Grain amplitude (with threshold & smoothing)
 - **Size** → Filter bandwidth (smaller particles = narrower Q)
 - **Trail Length** → Grain duration (2ms-200ms linear mapping)
-
-### Ready for Audio Matrix Implementation
-The tabbed structure provides the perfect foundation for implementing comprehensive audio parameter mapping controls, allowing real-time adjustment of how physics drives audio synthesis.
+- **Species Interaction** → Collision matrix determines audio triggering relationships

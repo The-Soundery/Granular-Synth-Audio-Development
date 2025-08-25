@@ -42,7 +42,8 @@ class GrainEngine {
         
         // Audio processing parameters
         this.threshold = 0.1; // Trigger threshold (0-1)
-        this.ratio = 2.0; // Compression ratio (1-10)
+        this.ratio = 2.0; // Compression ratio (1-10) - deprecated, replaced by smoothing
+        this.smoothing = 0.0; // Smoothing factor (0-1) - creates soft threshold boundary
         this.attack = 0.01; // Attack time in seconds
         this.release = 0.1; // Release time in seconds
         this.makeupGain = 1.0; // Post-compression gain boost
@@ -59,17 +60,42 @@ class GrainEngine {
     }
     
     calculateGain(particle, inputLevel) {
-        // Compressor-style gain calculation
-        if (inputLevel < this.threshold) {
+        // Smoothed threshold calculation
+        if (this.smoothing === 0.0) {
+            // Hard threshold - traditional on/off behavior
+            if (inputLevel <= this.threshold) {
+                this.gainReduction = 0;
+                return 0; // No audio below threshold
+            }
             return inputLevel * this.makeupGain;
+        } else {
+            // Soft threshold with smoothing
+            const smoothRange = this.smoothing * 0.5; // Smoothing extends 50% of smoothing value on each side
+            const lowerBound = Math.max(0, this.threshold - smoothRange);
+            const upperBound = Math.min(1, this.threshold + smoothRange);
+            
+            if (inputLevel <= lowerBound) {
+                // Below smooth range - no audio
+                this.gainReduction = 1.0;
+                return 0;
+            } else if (inputLevel >= upperBound) {
+                // Above smooth range - full audio
+                this.gainReduction = 0;
+                return inputLevel * this.makeupGain;
+            } else {
+                // Within smooth range - fade in/out
+                const fadePosition = (inputLevel - lowerBound) / (upperBound - lowerBound);
+                const smoothedGain = this.smoothCurve(fadePosition);
+                this.gainReduction = 1.0 - smoothedGain;
+                return inputLevel * smoothedGain * this.makeupGain;
+            }
         }
-        
-        const excessLevel = inputLevel - this.threshold;
-        const compressedExcess = excessLevel / this.ratio;
-        const outputLevel = this.threshold + compressedExcess;
-        
-        this.gainReduction = 1.0 - (outputLevel / inputLevel);
-        return outputLevel * this.makeupGain;
+    }
+    
+    // Smooth curve function for threshold fading
+    smoothCurve(t) {
+        // Smooth step function for natural-sounding fade
+        return t * t * (3 - 2 * t);
     }
     
     createGrain(particle, gainLevel) {
@@ -178,8 +204,14 @@ class CollisionGrainEngine extends GrainEngine {
         // Check recent collisions with enabled species
         const recentCollisions = particle.collisionEvents.filter(event => 
             this.collisionSpeciesMatrix[event.otherSpecies] && 
-            event.force * this.collisionSensitivity >= this.minimumCollisionForce
+            event.force >= this.minimumCollisionForce
         );
+        
+        // Debug logging for collision threshold
+        if (particle.collisionEvents.length > 0 && Math.random() < 0.05) { // 5% chance for debug
+            const maxForce = Math.max(...particle.collisionEvents.map(e => e.force));
+            console.log(`🔍 Collision check - Species ${this.speciesIndex}, MaxForce: ${maxForce.toFixed(3)}, Threshold: ${this.minimumCollisionForce.toFixed(3)}, Triggered: ${recentCollisions.length > 0}`);
+        }
         
         return recentCollisions.length > 0;
     }
@@ -196,6 +228,20 @@ class CollisionGrainEngine extends GrainEngine {
                 const maxForce = Math.max(...particle.collisionEvents.map(e => e.force));
                 const inputLevel = Math.min(1.0, maxForce * this.collisionSensitivity);
                 const gainLevel = this.calculateGain(particle, inputLevel);
+                
+                // Debug logging
+                if (Math.random() < 0.01) { // Log 1% of collision events to avoid spam
+                    console.log(`✨ Collision grain - Species ${this.speciesIndex}, Force: ${maxForce.toFixed(3)}, Gain: ${gainLevel.toFixed(3)}`);
+                }
+                
+                // Show collision pulse visualization
+                if (typeof showCollisionPulse === 'function') {
+                    const triggerSpecies = particle.collisionEvents.find(e => 
+                        this.collisionSpeciesMatrix[e.otherSpecies] && 
+                        e.force * this.collisionSensitivity >= this.minimumCollisionForce
+                    )?.otherSpecies;
+                    showCollisionPulse(this.speciesIndex, maxForce, triggerSpecies);
+                }
                 
                 // Create grain if we don't already have one for this particle
                 const existingGrain = this.grains.find(g => g.particle === particle);
@@ -226,15 +272,20 @@ class LoopingGrainEngine extends GrainEngine {
         this.grainDuration = 0.1; // Base grain duration
         this.grainSpacing = 0.05; // Time between grain starts
         this.alternateState = 1; // For alternating direction
+        this.velocityThreshold = 0.05; // Configurable velocity threshold
         
         // Per-particle grain scheduling
         this.particleGrains = new Map(); // particle -> grain info
     }
     
     shouldTrigger(particle) {
-        // Always trigger in looping mode if particle is moving
+        // Trigger in looping mode if particle velocity is above threshold
         const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
-        return velocity > 0.01; // Very low threshold for continuous operation
+        const normalizedVelocity = Math.min(1.0, velocity / 3.0); // Normalize to 0-1 range based on max velocity
+        
+        // Intuitive logic: lower threshold = more sound (trigger at lower velocities)
+        // If threshold is 0.1, trigger when normalized velocity > 0.1
+        return normalizedVelocity > this.velocityThreshold;
     }
     
     update(particles) {
@@ -455,10 +506,16 @@ class GranularSynth {
     // Set trigger mode (collision or looping)
     setTriggerMode(mode) {
         this.triggerMode = mode;
+        
+        // Ensure engines exist
+        if (!this.collisionEngine || !this.loopingEngine) {
+            this.initializeEngines();
+        }
+        
         this.currentEngine = mode === TRIGGER_MODES.COLLISION ? 
             this.collisionEngine : this.loopingEngine;
         
-        // Share audio buffer with new engine
+        // Share audio buffer and settings with new engine
         if (this.currentEngine && this.audioBuffer) {
             this.currentEngine.audioBuffer = this.audioBuffer;
         }
@@ -497,17 +554,28 @@ class GranularSynth {
         
         // Update common settings
         if (settings.threshold !== undefined) this.currentEngine.threshold = settings.threshold;
-        if (settings.ratio !== undefined) this.currentEngine.ratio = settings.ratio;
+        if (settings.ratio !== undefined) this.currentEngine.ratio = settings.ratio; // Keep for backwards compatibility
+        if (settings.smoothing !== undefined) this.currentEngine.smoothing = settings.smoothing;
         if (settings.attack !== undefined) this.currentEngine.attack = settings.attack;
         if (settings.release !== undefined) this.currentEngine.release = settings.release;
         if (settings.makeupGain !== undefined) this.currentEngine.makeupGain = settings.makeupGain;
         
         // Update mode-specific settings
         if (this.triggerMode === TRIGGER_MODES.COLLISION && this.collisionEngine) {
+            // Map threshold to collision-specific parameters
+            if (settings.threshold !== undefined) {
+                this.collisionEngine.minimumCollisionForce = settings.threshold;
+                console.log(`🎯 Collision threshold updated to: ${settings.threshold}`);
+            }
             if (settings.collisionSpeciesMatrix) this.collisionEngine.collisionSpeciesMatrix = settings.collisionSpeciesMatrix;
             if (settings.collisionSensitivity !== undefined) this.collisionEngine.collisionSensitivity = settings.collisionSensitivity;
             if (settings.minimumCollisionForce !== undefined) this.collisionEngine.minimumCollisionForce = settings.minimumCollisionForce;
         } else if (this.triggerMode === TRIGGER_MODES.LOOPING && this.loopingEngine) {
+            // Map threshold to looping-specific parameters  
+            if (settings.threshold !== undefined) {
+                this.loopingEngine.velocityThreshold = settings.threshold;
+                console.log(`🎯 Looping velocity threshold updated to: ${settings.threshold}`);
+            }
             if (settings.loopDirection) this.loopingEngine.loopDirection = settings.loopDirection;
             if (settings.crossfadeAmount !== undefined) this.loopingEngine.crossfadeAmount = settings.crossfadeAmount;
             if (settings.grainDuration !== undefined) this.loopingEngine.grainDuration = settings.grainDuration;
@@ -1006,10 +1074,9 @@ function toggleSpeciesMute(speciesIndex) {
     const synth = speciesAudioSynths[speciesIndex];
     synth.setMute(!synth.isMuted);
     
-    const button = document.getElementById(`speciesMute${speciesIndex}`);
-    if (button) {
-        button.textContent = synth.isMuted ? '🔇' : '🔊';
-        button.classList.toggle('active', !synth.isMuted);
+    // Update species tab status indicator
+    if (typeof updateSpeciesTabInfo === 'function') {
+        updateSpeciesTabInfo();
     }
 }
 
@@ -1089,7 +1156,7 @@ function setSpeciesPitch(speciesIndex, pitch) {
     
     const valueDisplay = document.getElementById(`speciesPitch${speciesIndex}-value`);
     if (valueDisplay) {
-        valueDisplay.textContent = `${pitch}st`;
+        valueDisplay.textContent = pitch >= 0 ? `+${pitch}st` : `${pitch}st`;
     }
 }
 
@@ -1473,15 +1540,7 @@ function createSpeciesAudioControls() {
     title.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
     title.textContent = `Species ${String.fromCharCode(65 + i)}`;
     
-    const muteButton = document.createElement('button');
-    muteButton.className = 'audio-button';
-    muteButton.id = `speciesMute${i}`;
-    muteButton.textContent = (synth && synth.isMuted) ? '🔇' : '🔊';
-    if (synth && !synth.isMuted) muteButton.classList.add('active');
-    muteButton.addEventListener('click', () => toggleSpeciesMute(i));
-    
     header.appendChild(title);
-    header.appendChild(muteButton);
     
     // File controls
     const fileControls = document.createElement('div');
@@ -1526,50 +1585,34 @@ function createSpeciesAudioControls() {
     // Setup waveform selection handlers
     setupWaveformSelection(waveformCanvas, i);
     
-    // Trigger Mode Selector
-    const triggerModeRow = document.createElement('div');
-    triggerModeRow.className = 'audio-controls-row';
-    triggerModeRow.style.marginBottom = '12px';
-    
-    const triggerLabel = document.createElement('span');
-    triggerLabel.textContent = 'Trigger:';
-    triggerLabel.style.minWidth = '50px';
-    triggerLabel.style.fontSize = '12px';
-    triggerLabel.style.color = '#ccc';
-    
-    const triggerModeControls = document.createElement('div');
-    triggerModeControls.style.display = 'flex';
-    triggerModeControls.style.gap = '4px';
-    triggerModeControls.style.flex = '1';
+    // Audio Mode Tab System
+    const audioModeTabsContainer = document.createElement('div');
+    audioModeTabsContainer.className = 'audio-mode-tabs';
     
     const currentTriggerMode = (synth && synth.triggerMode) || TRIGGER_MODES.LOOPING;
     
-    // Collision mode button
-    const collisionBtn = document.createElement('button');
-    collisionBtn.className = 'loop-button';
-    collisionBtn.textContent = '✨';
-    collisionBtn.title = 'Collision Triggered';
-    if (currentTriggerMode === TRIGGER_MODES.COLLISION) collisionBtn.classList.add('active');
-    collisionBtn.addEventListener('click', () => {
+    // Collision mode tab
+    const collisionTab = document.createElement('button');
+    collisionTab.className = 'audio-mode-tab';
+    if (currentTriggerMode === TRIGGER_MODES.COLLISION) collisionTab.classList.add('active');
+    collisionTab.innerHTML = '<span>✨</span><span>Collision</span>';
+    collisionTab.addEventListener('click', () => {
         setSpeciesTriggerMode(i, TRIGGER_MODES.COLLISION);
-        updateTriggerModeUI(i);
+        updateAudioModeUI(i);
     });
     
-    // Looping mode button
-    const loopingBtn = document.createElement('button');
-    loopingBtn.className = 'loop-button';
-    loopingBtn.textContent = '🔁';
-    loopingBtn.title = 'Continuous Looping';
-    if (currentTriggerMode === TRIGGER_MODES.LOOPING) loopingBtn.classList.add('active');
-    loopingBtn.addEventListener('click', () => {
+    // Looping mode tab
+    const loopingTab = document.createElement('button');
+    loopingTab.className = 'audio-mode-tab';
+    if (currentTriggerMode === TRIGGER_MODES.LOOPING) loopingTab.classList.add('active');
+    loopingTab.innerHTML = '<span>🔁</span><span>Looping</span>';
+    loopingTab.addEventListener('click', () => {
         setSpeciesTriggerMode(i, TRIGGER_MODES.LOOPING);
-        updateTriggerModeUI(i);
+        updateAudioModeUI(i);
     });
     
-    triggerModeControls.appendChild(collisionBtn);
-    triggerModeControls.appendChild(loopingBtn);
-    triggerModeRow.appendChild(triggerLabel);
-    triggerModeRow.appendChild(triggerModeControls);
+    audioModeTabsContainer.appendChild(collisionTab);
+    audioModeTabsContainer.appendChild(loopingTab);
     
     // Volume control
     const volumeRow = document.createElement('div');
@@ -1601,77 +1644,15 @@ function createSpeciesAudioControls() {
     volumeRow.appendChild(volumeSlider);
     volumeRow.appendChild(volumeValue);
     
-    // Compressor-style gain controls
-    const gainControlsContainer = document.createElement('div');
-    gainControlsContainer.id = `gainControls${i}`;
+    // Audio mode content container
+    const audioModeContent = document.createElement('div');
+    audioModeContent.className = 'audio-mode-content';
+    audioModeContent.id = `audioModeContent${i}`;
     
-    // Threshold control
-    const thresholdRow = document.createElement('div');
-    thresholdRow.className = 'audio-controls-row';
+    // Create both mode panels
+    createAudioModePanels(audioModeContent, i, currentTriggerMode, synth);
     
-    const thresholdLabel = document.createElement('span');
-    thresholdLabel.textContent = 'Threshold:';
-    thresholdLabel.style.minWidth = '50px';
-    thresholdLabel.style.fontSize = '12px';
-    
-    const thresholdSlider = document.createElement('input');
-    thresholdSlider.type = 'range';
-    thresholdSlider.className = 'slider';
-    thresholdSlider.id = `speciesThreshold${i}`;
-    thresholdSlider.min = '0.01';
-    thresholdSlider.max = '1.0';
-    thresholdSlider.step = '0.01';
-    thresholdSlider.value = '0.1';
-    thresholdSlider.style.flex = '1';
-    thresholdSlider.addEventListener('input', (e) => updateEngineParameter(i, 'threshold', parseFloat(e.target.value)));
-    
-    const thresholdValue = document.createElement('span');
-    thresholdValue.className = 'value-display';
-    thresholdValue.id = `speciesThreshold${i}-value`;
-    thresholdValue.textContent = '0.10';
-    
-    thresholdRow.appendChild(thresholdLabel);
-    thresholdRow.appendChild(thresholdSlider);
-    thresholdRow.appendChild(thresholdValue);
-    
-    // Ratio control
-    const ratioRow = document.createElement('div');
-    ratioRow.className = 'audio-controls-row';
-    
-    const ratioLabel = document.createElement('span');
-    ratioLabel.textContent = 'Ratio:';
-    ratioLabel.style.minWidth = '50px';
-    ratioLabel.style.fontSize = '12px';
-    
-    const ratioSlider = document.createElement('input');
-    ratioSlider.type = 'range';
-    ratioSlider.className = 'slider';
-    ratioSlider.id = `speciesRatio${i}`;
-    ratioSlider.min = '1.0';
-    ratioSlider.max = '10.0';
-    ratioSlider.step = '0.1';
-    ratioSlider.value = '2.0';
-    ratioSlider.style.flex = '1';
-    ratioSlider.addEventListener('input', (e) => updateEngineParameter(i, 'ratio', parseFloat(e.target.value)));
-    
-    const ratioValue = document.createElement('span');
-    ratioValue.className = 'value-display';
-    ratioValue.id = `speciesRatio${i}-value`;
-    ratioValue.textContent = '2.0:1';
-    
-    ratioRow.appendChild(ratioLabel);
-    ratioRow.appendChild(ratioSlider);
-    ratioRow.appendChild(ratioValue);
-    
-    gainControlsContainer.appendChild(thresholdRow);
-    gainControlsContainer.appendChild(ratioRow);
-    
-    // Mode-specific controls container
-    const modeSpecificContainer = document.createElement('div');
-    modeSpecificContainer.id = `modeSpecific${i}`;
-    
-    // Create initial mode-specific controls
-    createModeSpecificControls(modeSpecificContainer, i, currentTriggerMode);
+    // This is now handled in createAudioModePanels
     
     // Legacy loop controls moved to mode-specific section
     
@@ -1688,8 +1669,8 @@ function createSpeciesAudioControls() {
     pitchSlider.type = 'range';
     pitchSlider.className = 'slider';
     pitchSlider.id = `speciesPitch${i}`;
-    pitchSlider.min = '0';
-    pitchSlider.max = '24';
+    pitchSlider.min = '-12';
+    pitchSlider.max = '12';
     pitchSlider.step = '1';
     const currentPitch = (synth && typeof synth.pitch !== 'undefined') ? synth.pitch : 0;
     pitchSlider.value = currentPitch.toString();
@@ -1699,7 +1680,7 @@ function createSpeciesAudioControls() {
     const pitchValue = document.createElement('span');
     pitchValue.className = 'value-display';
     pitchValue.id = `speciesPitch${i}-value`;
-    pitchValue.textContent = `${currentPitch}st`;
+    pitchValue.textContent = currentPitch >= 0 ? `+${currentPitch}st` : `${currentPitch}st`;
     
     pitchRow.appendChild(pitchLabel);
     pitchRow.appendChild(pitchSlider);
@@ -1810,35 +1791,7 @@ function createSpeciesAudioControls() {
     activityRow.appendChild(grainActivity);
     activityRow.appendChild(audioMeter);
     
-    // Gain reduction meter
-    const gainReductionRow = document.createElement('div');
-    gainReductionRow.className = 'audio-controls-row';
-    
-    const gainReductionLabel = document.createElement('span');
-    gainReductionLabel.textContent = 'Gain Red:';
-    gainReductionLabel.style.minWidth = '50px';
-    gainReductionLabel.style.fontSize = '12px';
-    
-    const gainReductionMeter = document.createElement('div');
-    gainReductionMeter.className = 'meter-bar';
-    gainReductionMeter.style.flex = '1';
-    
-    const gainReductionFill = document.createElement('div');
-    gainReductionFill.className = 'meter-fill';
-    gainReductionFill.id = `gainReduction${i}`;
-    gainReductionFill.style.background = 'linear-gradient(to right, #4CAF50, #FFC107, #FF5722)';
-    gainReductionFill.style.width = '0%';
-    
-    gainReductionMeter.appendChild(gainReductionFill);
-    
-    const gainReductionValue = document.createElement('span');
-    gainReductionValue.className = 'value-display';
-    gainReductionValue.id = `gainReduction${i}-value`;
-    gainReductionValue.textContent = '0dB';
-    
-    gainReductionRow.appendChild(gainReductionLabel);
-    gainReductionRow.appendChild(gainReductionMeter);
-    gainReductionRow.appendChild(gainReductionValue);
+    // Gain reduction meter removed - too confusing for users
     
     // Assemble panel
     panel.appendChild(speciesParamsHeader);
@@ -1846,11 +1799,9 @@ function createSpeciesAudioControls() {
     panel.appendChild(header);
     panel.appendChild(fileControls);
     panel.appendChild(waveformContainer);
-    panel.appendChild(triggerModeRow);
+    panel.appendChild(audioModeTabsContainer);
+    panel.appendChild(audioModeContent);
     panel.appendChild(volumeRow);
-    panel.appendChild(gainControlsContainer);
-    panel.appendChild(modeSpecificContainer);
-    panel.appendChild(gainReductionRow);
     panel.appendChild(pitchRow);
     panel.appendChild(detuneRow);
     panel.appendChild(fadeRow);
@@ -1899,40 +1850,453 @@ function updateEngineParameter(speciesIndex, parameter, value) {
     }
 }
 
-// Update trigger mode UI
-function updateTriggerModeUI(speciesIndex) {
-    const modeSpecificContainer = document.getElementById(`modeSpecific${speciesIndex}`);
-    if (!modeSpecificContainer || !speciesAudioSynths[speciesIndex]) return;
+// Update audio mode UI
+function updateAudioModeUI(speciesIndex) {
+    const audioModeContent = document.getElementById(`audioModeContent${speciesIndex}`);
+    if (!audioModeContent || !speciesAudioSynths[speciesIndex]) return;
     
     const synth = speciesAudioSynths[speciesIndex];
-    createModeSpecificControls(modeSpecificContainer, speciesIndex, synth.triggerMode);
-}
-
-// Create mode-specific controls
-function createModeSpecificControls(container, speciesIndex, triggerMode) {
-    container.innerHTML = '';
     
-    if (triggerMode === TRIGGER_MODES.COLLISION) {
-        createCollisionControls(container, speciesIndex);
-    } else {
-        createLoopingControls(container, speciesIndex);
+    // Update tab appearance
+    const tabs = audioModeContent.parentNode.querySelectorAll('.audio-mode-tab');
+    tabs.forEach((tab, index) => {
+        const isActive = (index === 0 && synth.triggerMode === TRIGGER_MODES.COLLISION) ||
+                        (index === 1 && synth.triggerMode === TRIGGER_MODES.LOOPING);
+        tab.classList.toggle('active', isActive);
+    });
+    
+    // Show/hide appropriate panels
+    const collisionPanel = document.getElementById(`collisionPanel${speciesIndex}`);
+    const loopingPanel = document.getElementById(`loopingPanel${speciesIndex}`);
+    
+    if (collisionPanel && loopingPanel) {
+        collisionPanel.classList.toggle('active', synth.triggerMode === TRIGGER_MODES.COLLISION);
+        loopingPanel.classList.toggle('active', synth.triggerMode === TRIGGER_MODES.LOOPING);
     }
 }
 
-// Create collision mode controls
-function createCollisionControls(container, speciesIndex) {
-    // Species collision matrix
-    const matrixHeader = document.createElement('div');
-    matrixHeader.style.fontSize = '12px';
-    matrixHeader.style.color = '#ccc';
-    matrixHeader.style.marginBottom = '8px';
-    matrixHeader.textContent = 'Collision Triggers:';
+// Create audio mode panels (Collision and Looping)
+function createAudioModePanels(container, speciesIndex, currentMode, synth) {
+    container.innerHTML = '';
     
+    // Collision mode panel
+    const collisionPanel = document.createElement('div');
+    collisionPanel.className = 'audio-mode-panel';
+    collisionPanel.id = `collisionPanel${speciesIndex}`;
+    if (currentMode === TRIGGER_MODES.COLLISION) collisionPanel.classList.add('active');
+    
+    createCollisionModePanel(collisionPanel, speciesIndex, synth);
+    
+    // Looping mode panel
+    const loopingPanel = document.createElement('div');
+    loopingPanel.className = 'audio-mode-panel';
+    loopingPanel.id = `loopingPanel${speciesIndex}`;
+    if (currentMode === TRIGGER_MODES.LOOPING) loopingPanel.classList.add('active');
+    
+    createLoopingModePanel(loopingPanel, speciesIndex, synth);
+    
+    container.appendChild(collisionPanel);
+    container.appendChild(loopingPanel);
+}
+
+// Create collision mode panel with intuitive controls
+function createCollisionModePanel(container, speciesIndex, synth) {
+    // Threshold with visualization
+    const thresholdGroup = document.createElement('div');
+    thresholdGroup.className = 'audio-controls-group';
+    
+    const thresholdTitle = document.createElement('h4');
+    thresholdTitle.textContent = 'Collision Threshold';
+    thresholdGroup.appendChild(thresholdTitle);
+    
+    const thresholdContainer = document.createElement('div');
+    thresholdContainer.className = 'threshold-container';
+    thresholdContainer.style.position = 'relative'; // Required for absolute positioned children
+    
+    // Collision pulse visualization
+    const collisionViz = document.createElement('div');
+    collisionViz.className = 'collision-pulse-container';
+    collisionViz.id = `collisionPulseContainer${speciesIndex}`;
+    collisionViz.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 50px;
+        height: 6px;
+        border-radius: 3px;
+        overflow: hidden;
+        z-index: 1;
+        pointer-events: none;
+    `;
+    
+    thresholdContainer.appendChild(collisionViz);
+    
+    // Hide the original threshold slider - we'll use the new drag interface
+    const thresholdSlider = document.createElement('input');
+    thresholdSlider.type = 'range';
+    thresholdSlider.className = 'slider threshold-slider';
+    thresholdSlider.id = `speciesThreshold${speciesIndex}`;
+    thresholdSlider.min = '0.01';
+    thresholdSlider.max = '1.0';
+    thresholdSlider.step = '0.01';
+    thresholdSlider.value = '0.15'; // Better default for collisions
+    thresholdSlider.style.display = 'none'; // Hide original slider
+    thresholdSlider.addEventListener('input', (e) => {
+        updateEngineParameter(speciesIndex, 'threshold', parseFloat(e.target.value));
+    });
+    
+    thresholdContainer.appendChild(thresholdSlider);
+    
+    const thresholdRow = document.createElement('div');
+    thresholdRow.className = 'audio-controls-row';
+    thresholdRow.appendChild(thresholdContainer);
+    
+    thresholdGroup.appendChild(thresholdRow);
+    
+    // Add smoothing dial to threshold group
+    createSmoothingDial(thresholdContainer, speciesIndex, 'collision');
+    
+    // Species collision matrix
+    const matrixGroup = document.createElement('div');
+    matrixGroup.className = 'audio-controls-group';
+    
+    const matrixTitle = document.createElement('h4');
+    matrixTitle.textContent = 'Collision Triggers';
+    matrixGroup.appendChild(matrixTitle);
+    
+    createSpeciesCollisionMatrix(matrixGroup, speciesIndex);
+    
+    container.appendChild(thresholdGroup);
+    container.appendChild(matrixGroup);
+}
+
+// Create looping mode panel
+function createLoopingModePanel(container, speciesIndex, synth) {
+    // Threshold with velocity visualization
+    const thresholdGroup = document.createElement('div');
+    thresholdGroup.className = 'audio-controls-group';
+    
+    const thresholdTitle = document.createElement('h4');
+    thresholdTitle.textContent = 'Velocity Threshold';
+    thresholdGroup.appendChild(thresholdTitle);
+    
+    const thresholdContainer = document.createElement('div');
+    thresholdContainer.className = 'threshold-container';
+    thresholdContainer.style.position = 'relative'; // Required for absolute positioned children
+    
+    // Velocity level visualization
+    const velocityViz = document.createElement('div');
+    velocityViz.className = 'threshold-visualization';
+    
+    const velocityBar = document.createElement('div');
+    velocityBar.className = 'velocity-level-bar';
+    velocityBar.id = `velocityBar${speciesIndex}`;
+    
+    velocityViz.appendChild(velocityBar);
+    thresholdContainer.appendChild(velocityViz);
+    
+    // Hide the original threshold slider - we'll use the new drag interface
+    const thresholdSlider = document.createElement('input');
+    thresholdSlider.type = 'range';
+    thresholdSlider.className = 'slider threshold-slider';
+    thresholdSlider.id = `speciesThreshold${speciesIndex}`;
+    thresholdSlider.min = '0.01';
+    thresholdSlider.max = '1.0';
+    thresholdSlider.step = '0.01';
+    thresholdSlider.value = '0.05'; // Lower default for continuous looping
+    thresholdSlider.style.display = 'none'; // Hide original slider
+    thresholdSlider.addEventListener('input', (e) => {
+        updateEngineParameter(speciesIndex, 'threshold', parseFloat(e.target.value));
+    });
+    
+    thresholdContainer.appendChild(thresholdSlider);
+    
+    const thresholdRow = document.createElement('div');
+    thresholdRow.className = 'audio-controls-row';
+    thresholdRow.appendChild(thresholdContainer);
+    
+    thresholdGroup.appendChild(thresholdRow);
+    
+    // Add smoothing dial to threshold group
+    createSmoothingDial(thresholdContainer, speciesIndex, 'looping');
+    
+    // Loop direction and crossfade
+    const loopGroup = document.createElement('div');
+    loopGroup.className = 'audio-controls-group';
+    
+    const loopTitle = document.createElement('h4');
+    loopTitle.textContent = 'Loop Settings';
+    loopGroup.appendChild(loopTitle);
+    
+    createLoopingControls(loopGroup, speciesIndex);
+    
+    container.appendChild(thresholdGroup);
+    container.appendChild(loopGroup);
+}
+
+// Create smoothing dial component
+function createSmoothingDial(container, speciesIndex, mode) {
+    const dialContainer = document.createElement('div');
+    dialContainer.className = 'smoothing-dial-container';
+    dialContainer.style.cssText = `
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        z-index: 3;
+    `;
+    
+    const dial = document.createElement('div');
+    dial.className = 'smoothing-dial';
+    dial.id = `${mode}SmoothingDial${speciesIndex}`;
+    dial.style.cssText = `
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #444;
+        border: 2px solid #666;
+        position: relative;
+        cursor: pointer;
+        transition: border-color 0.2s ease;
+    `;
+    
+    const indicator = document.createElement('div');
+    indicator.className = 'smoothing-dial-indicator';
+    indicator.id = `${mode}SmoothingDialIndicator${speciesIndex}`;
+    indicator.style.cssText = `
+        position: absolute;
+        top: 2px;
+        left: 50%;
+        width: 2px;
+        height: 8px;
+        background: #4CAF50;
+        transform-origin: center bottom;
+        transform: translateX(-50%) rotate(0deg);
+        border-radius: 1px;
+        transition: transform 0.1s ease;
+    `;
+    
+    dial.appendChild(indicator);
+    
+    const dialValue = document.createElement('div');
+    dialValue.className = 'smoothing-dial-value';
+    dialValue.id = `${mode}SmoothingDialValue${speciesIndex}`;
+    dialValue.style.cssText = `
+        font-size: 10px;
+        color: #888;
+        min-width: 20px;
+        text-align: center;
+    `;
+    dialValue.textContent = '0.0';
+    
+    dialContainer.appendChild(dial);
+    dialContainer.appendChild(dialValue);
+    
+    // Add smoothing visualization to the threshold container
+    addSmoothingVisualization(container, speciesIndex, mode);
+    
+    // Setup dial interaction
+    setupSmoothingDialInteraction(dial, speciesIndex, mode);
+    
+    container.appendChild(dialContainer);
+}
+
+// Add smoothing visualization to threshold container
+function addSmoothingVisualization(container, speciesIndex, mode) {
+    // Create new threshold visualization elements
+    
+    // Make the container bigger and adjust styling to fit within parent
+    container.style.cssText += `
+        height: 14px; /* 20% thicker than previous 12px */
+        width: 100%; /* Fit within container */
+        max-width: calc(100% - 60px); /* Leave space for smoothing dial */
+        margin: 10px 0;
+        box-sizing: border-box;
+    `;
+    
+    // Create threshold line (vertical line that shows current threshold position)
+    const thresholdLine = document.createElement('div');
+    thresholdLine.className = 'threshold-line';
+    thresholdLine.id = `${mode}ThresholdLine${speciesIndex}`;
+    thresholdLine.style.cssText = `
+        position: absolute;
+        top: -2px;
+        width: 2px;
+        height: 18px; /* Match new container height + 4px extra */
+        background: #fff;
+        z-index: 5;
+        left: 15%; /* Initial position */
+        pointer-events: none;
+        box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+    `;
+    
+    // Create drag tab underneath the meter
+    const dragTab = document.createElement('div');
+    dragTab.className = 'threshold-drag-tab';
+    dragTab.id = `${mode}DragTab${speciesIndex}`;
+    dragTab.style.cssText = `
+        position: absolute;
+        top: 16px; /* Adjusted for new container height */
+        left: calc(15% - 8px);
+        width: 16px;
+        height: 8px;
+        background: #4CAF50;
+        border-radius: 0 0 4px 4px;
+        cursor: ew-resize;
+        z-index: 5;
+        border: 1px solid #fff;
+    `;
+    
+    // Create single smoothing ramp line (left side, ramping up to threshold)
+    const smoothRampLine = document.createElement('div');
+    smoothRampLine.className = 'smoothing-ramp-line';
+    smoothRampLine.id = `${mode}SmoothRampLine${speciesIndex}`;
+    smoothRampLine.style.cssText = `
+        position: absolute;
+        top: 0;
+        width: 0px;
+        height: 14px; /* Full height of container */
+        background: linear-gradient(to right, transparent, rgba(76, 175, 80, 0.3));
+        z-index: 3;
+        right: 85%; /* Start from left, end at threshold (15% from left = 85% from right) */
+        opacity: 0;
+        transition: all 0.2s ease;
+        border-radius: 2px 0 0 2px;
+    `;
+    
+    container.appendChild(thresholdLine);
+    container.appendChild(dragTab);
+    container.appendChild(smoothRampLine);
+    
+    // Setup drag interaction for the new tab
+    setupThresholdDragInteraction(dragTab, thresholdLine, smoothRampLine, speciesIndex, mode);
+}
+
+// Setup smoothing dial interaction
+function setupSmoothingDialInteraction(dial, speciesIndex, mode) {
+    let isDragging = false;
+    let startY = 0;
+    let startSmoothing = 0.0;
+    
+    dial.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        const synth = speciesAudioSynths[speciesIndex];
+        startSmoothing = (synth && synth.currentEngine && synth.currentEngine.smoothing !== undefined) ? synth.currentEngine.smoothing : 0.0;
+        e.preventDefault();
+    });
+    
+    const handleMouseMove = (e) => {
+        if (!isDragging) return;
+        
+        // Use vertical mouse movement: up increases smoothing, down decreases
+        const deltaY = startY - e.clientY;
+        const sensitivity = 0.01; // Smoothing change per pixel
+        let newSmoothing = startSmoothing + (deltaY * sensitivity);
+        newSmoothing = Math.max(0.0, Math.min(1.0, newSmoothing)); // Clamp to 0-1
+        
+        // Update visual indicator
+        const indicator = document.getElementById(`${mode}SmoothingDialIndicator${speciesIndex}`);
+        if (indicator) {
+            const rotationDegrees = (newSmoothing * 180) - 90; // -90 to +90 degrees
+            indicator.style.transform = `translateX(-50%) rotate(${rotationDegrees}deg)`;
+        }
+        
+        // Update value display
+        const valueDisplay = document.getElementById(`${mode}SmoothingDialValue${speciesIndex}`);
+        if (valueDisplay) {
+            valueDisplay.textContent = newSmoothing.toFixed(1);
+        }
+        
+        // Update smoothing visualization
+        updateSmoothingVisualization(speciesIndex, mode, newSmoothing);
+        
+        // Update engine parameter
+        updateEngineParameter(speciesIndex, 'smoothing', newSmoothing);
+    };
+    
+    const handleMouseUp = () => {
+        if (isDragging) {
+            isDragging = false;
+        }
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+}
+
+// Setup threshold drag interaction
+function setupThresholdDragInteraction(dragTab, thresholdLine, smoothRampLine, speciesIndex, mode) {
+    let isDragging = false;
+    let startX = 0;
+    let containerRect = null;
+    
+    dragTab.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        containerRect = dragTab.parentNode.getBoundingClientRect();
+        e.preventDefault();
+    });
+    
+    const handleMouseMove = (e) => {
+        if (!isDragging || !containerRect) return;
+        
+        // Calculate position relative to container
+        const relativeX = e.clientX - containerRect.left;
+        const containerWidth = containerRect.width - 60; // Account for smoothing dial space
+        let position = Math.max(0, Math.min(1, relativeX / containerWidth));
+        
+        // Update threshold value
+        updateEngineParameter(speciesIndex, 'threshold', position);
+        
+        // Update visual elements
+        const percentage = position * 100;
+        thresholdLine.style.left = `${percentage}%`;
+        dragTab.style.left = `calc(${percentage}% - 8px)`;
+        
+        // Update smoothing ramp position (ends at threshold)
+        smoothRampLine.style.right = `${100 - percentage}%`;
+    };
+    
+    const handleMouseUp = () => {
+        if (isDragging) {
+            isDragging = false;
+            containerRect = null;
+        }
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+}
+
+// Update smoothing visualization on threshold slider
+function updateSmoothingVisualization(speciesIndex, mode, smoothingValue) {
+    const smoothRampLine = document.getElementById(`${mode}SmoothRampLine${speciesIndex}`);
+    
+    if (!smoothRampLine) return;
+    
+    if (smoothingValue > 0) {
+        // Show smoothing ramp with width based on smoothing value
+        const rampWidth = smoothingValue * 30; // Max 30% of container width
+        
+        smoothRampLine.style.opacity = '1';
+        smoothRampLine.style.width = `${rampWidth}%`;
+    } else {
+        // Hide smoothing ramp when smoothing is 0
+        smoothRampLine.style.opacity = '0';
+        smoothRampLine.style.width = '0%';
+    }
+}
+
+// Create species collision matrix (simplified from old version)
+function createSpeciesCollisionMatrix(container, speciesIndex) {
     const matrixContainer = document.createElement('div');
     matrixContainer.style.display = 'grid';
     matrixContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
-    matrixContainer.style.gap = '4px';
-    matrixContainer.style.marginBottom = '12px';
+    matrixContainer.style.gap = '6px';
     
     const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
     const currentSpeciesColors = (typeof speciesColors !== 'undefined') ? speciesColors : [[1,0,0],[0,0,1]];
@@ -1941,9 +2305,10 @@ function createCollisionControls(container, speciesIndex) {
         const checkboxContainer = document.createElement('label');
         checkboxContainer.style.display = 'flex';
         checkboxContainer.style.alignItems = 'center';
-        checkboxContainer.style.gap = '4px';
-        checkboxContainer.style.fontSize = '11px';
+        checkboxContainer.style.gap = '6px';
+        checkboxContainer.style.fontSize = '12px';
         checkboxContainer.style.color = rgbToHex(currentSpeciesColors[i] || [1,1,1]);
+        checkboxContainer.style.cursor = 'pointer';
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -1960,57 +2325,123 @@ function createCollisionControls(container, speciesIndex) {
         matrixContainer.appendChild(checkboxContainer);
     }
     
-    // Collision sensitivity
-    const sensitivityRow = document.createElement('div');
-    sensitivityRow.className = 'audio-controls-row';
-    
-    const sensitivityLabel = document.createElement('span');
-    sensitivityLabel.textContent = 'Sensitivity:';
-    sensitivityLabel.style.minWidth = '50px';
-    sensitivityLabel.style.fontSize = '12px';
-    
-    const sensitivitySlider = document.createElement('input');
-    sensitivitySlider.type = 'range';
-    sensitivitySlider.className = 'slider';
-    sensitivitySlider.min = '0.1';
-    sensitivitySlider.max = '5.0';
-    sensitivitySlider.step = '0.1';
-    sensitivitySlider.value = '1.0';
-    sensitivitySlider.style.flex = '1';
-    sensitivitySlider.addEventListener('input', (e) => {
-        updateEngineParameter(speciesIndex, 'collisionSensitivity', parseFloat(e.target.value));
-        document.getElementById(`collisionSensitivity${speciesIndex}-value`).textContent = `${parseFloat(e.target.value).toFixed(1)}x`;
-    });
-    
-    const sensitivityValue = document.createElement('span');
-    sensitivityValue.className = 'value-display';
-    sensitivityValue.id = `collisionSensitivity${speciesIndex}-value`;
-    sensitivityValue.textContent = '1.0x';
-    
-    sensitivityRow.appendChild(sensitivityLabel);
-    sensitivityRow.appendChild(sensitivitySlider);
-    sensitivityRow.appendChild(sensitivityValue);
-    
-    container.appendChild(matrixHeader);
     container.appendChild(matrixContainer);
-    container.appendChild(sensitivityRow);
 }
 
-// Create looping mode controls
+// Species velocity/collision tracking for visualization
+let speciesActivityLevels = new Array(8).fill(0);
+
+// Update species activity levels (called from animation loop)
+function updateSpeciesActivityLevels(particles) {
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    
+    for (let i = 0; i < currentSpeciesCount; i++) {
+        const speciesParticles = particles.filter(p => p.species === i);
+        if (speciesParticles.length === 0) {
+            speciesActivityLevels[i] = 0;
+            continue;
+        }
+        
+        // Calculate average activity for this species
+        let totalActivity = 0;
+        for (const particle of speciesParticles) {
+            // For collision mode: use collision force
+            const collisionActivity = particle.collisionForce || 0;
+            
+            // For looping mode: use velocity
+            const velocity = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+            const velocityActivity = Math.min(1.0, velocity / 3.0); // Normalize to max velocity
+            
+            // Use the higher of the two
+            totalActivity += Math.max(collisionActivity, velocityActivity);
+        }
+        
+        // Smooth the activity level
+        const targetLevel = totalActivity / speciesParticles.length;
+        speciesActivityLevels[i] = speciesActivityLevels[i] * 0.9 + targetLevel * 0.1;
+    }
+    
+    // Update UI visualization
+    updateVelocityVisualization();
+}
+
+// Update velocity visualization bars (for looping mode only)
+function updateVelocityVisualization() {
+    const currentSpeciesCount = (typeof speciesCount !== 'undefined') ? speciesCount : 2;
+    
+    for (let i = 0; i < currentSpeciesCount; i++) {
+        const velocityBar = document.getElementById(`velocityBar${i}`);
+        if (velocityBar) {
+            const level = Math.min(100, speciesActivityLevels[i] * 100);
+            velocityBar.style.width = `${level}%`;
+        }
+    }
+}
+
+// Show collision pulse for collision mode visualization
+function showCollisionPulse(speciesIndex, force, triggerSpecies) {
+    const container = document.getElementById(`collisionPulseContainer${speciesIndex}`);
+    if (!container) return;
+    
+    // Create pulse element
+    const pulse = document.createElement('div');
+    const intensity = Math.min(1.0, force);
+    const opacity = 0.3 + (intensity * 0.7);
+    
+    pulse.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: ${intensity * 100}%;
+        height: 100%;
+        background: linear-gradient(to right, 
+            rgba(255, 68, 68, ${opacity}), 
+            rgba(255, 193, 7, ${opacity * 0.5}), 
+            transparent);
+        border-radius: 3px;
+        animation: collisionPulse 0.3s ease-out forwards;
+    `;
+    
+    // Add CSS animation if not already defined
+    if (!document.getElementById('collisionPulseStyles')) {
+        const style = document.createElement('style');
+        style.id = 'collisionPulseStyles';
+        style.textContent = `
+            @keyframes collisionPulse {
+                0% { transform: scaleX(0); opacity: 0.8; }
+                50% { transform: scaleX(1); opacity: 1; }
+                100% { transform: scaleX(0.1); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    container.appendChild(pulse);
+    
+    // Remove pulse after animation
+    setTimeout(() => {
+        if (pulse.parentNode) {
+            pulse.remove();
+        }
+    }, 300);
+}
+
+// Create looping controls (simplified version for new UI)
 function createLoopingControls(container, speciesIndex) {
     // Loop direction controls
-    const loopRow = document.createElement('div');
-    loopRow.className = 'audio-controls-row';
-    loopRow.style.marginBottom = '8px';
+    const directionRow = document.createElement('div');
+    directionRow.className = 'audio-controls-row';
+    directionRow.style.marginBottom = '8px';
     
-    const loopLabel = document.createElement('span');
-    loopLabel.textContent = 'Direction:';
-    loopLabel.style.minWidth = '50px';
-    loopLabel.style.fontSize = '12px';
-    loopLabel.style.color = '#ccc';
+    const directionLabel = document.createElement('span');
+    directionLabel.textContent = 'Direction:';
+    directionLabel.style.minWidth = '60px';
+    directionLabel.style.fontSize = '12px';
+    directionLabel.style.color = '#ccc';
     
     const loopControls = document.createElement('div');
     loopControls.className = 'loop-controls';
+    loopControls.style.flex = '1';
     
     const directions = [
         { mode: 'forward', icon: '▶', title: 'Forward' },
@@ -2023,27 +2454,27 @@ function createLoopingControls(container, speciesIndex) {
         btn.className = 'loop-button';
         btn.textContent = dir.icon;
         btn.title = dir.title;
-        if (dir.mode === 'forward') btn.classList.add('active'); // Default
+        if (dir.mode === 'forward') btn.classList.add('active');
         btn.addEventListener('click', () => {
             updateEngineParameter(speciesIndex, 'loopDirection', dir.mode);
-            // Update button states
             loopControls.querySelectorAll('.loop-button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         });
         loopControls.appendChild(btn);
     });
     
-    loopRow.appendChild(loopLabel);
-    loopRow.appendChild(loopControls);
+    directionRow.appendChild(directionLabel);
+    directionRow.appendChild(loopControls);
     
     // Crossfade amount
     const crossfadeRow = document.createElement('div');
     crossfadeRow.className = 'audio-controls-row';
     
     const crossfadeLabel = document.createElement('span');
-    crossfadeLabel.textContent = 'Crossfade:';
-    crossfadeLabel.style.minWidth = '50px';
+    crossfadeLabel.textContent = 'Smoothness:';
+    crossfadeLabel.style.minWidth = '60px';
     crossfadeLabel.style.fontSize = '12px';
+    crossfadeLabel.style.color = '#ccc';
     
     const crossfadeSlider = document.createElement('input');
     crossfadeSlider.type = 'range';
@@ -2067,7 +2498,7 @@ function createLoopingControls(container, speciesIndex) {
     crossfadeRow.appendChild(crossfadeSlider);
     crossfadeRow.appendChild(crossfadeValue);
     
-    container.appendChild(loopRow);
+    container.appendChild(directionRow);
     container.appendChild(crossfadeRow);
 }
 

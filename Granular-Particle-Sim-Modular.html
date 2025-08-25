@@ -420,6 +420,101 @@
             margin-bottom: 15px;
         }
         
+        /* Audio Mode Tab System */
+        .audio-mode-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            background: #1a1a1a;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+        
+        .audio-mode-tab {
+            flex: 1;
+            padding: 12px 16px;
+            background: #222;
+            color: #ccc;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 13px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .audio-mode-tab:hover {
+            background: #333;
+            color: #fff;
+        }
+        
+        .audio-mode-tab.active {
+            background: #4CAF50;
+            color: #000;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .audio-mode-tab:first-child {
+            border-right: 1px solid #333;
+        }
+        
+        .audio-mode-content {
+            min-height: 200px;
+        }
+        
+        .audio-mode-panel {
+            display: none;
+        }
+        
+        .audio-mode-panel.active {
+            display: block;
+        }
+        
+        /* Threshold with visualization */
+        .threshold-container {
+            position: relative;
+            margin-bottom: 12px;
+        }
+        
+        .threshold-visualization {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 50px; /* Space for value display */
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .velocity-level-bar {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50 0%, #FFC107 50%, #FF5722 100%);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+        
+        .threshold-slider {
+            position: relative;
+            z-index: 2;
+            background: transparent !important;
+        }
+        
+        .threshold-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #4CAF50;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
         .species-tabs {
             display: flex;
             flex-wrap: wrap;
@@ -478,12 +573,22 @@
             height: 8px;
             border-radius: 50%;
             background: #666;
-            transition: background-color 0.2s ease;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .species-audio-status:hover {
+            transform: scale(1.1);
         }
         
         .species-audio-status.active {
             background: #4CAF50;
             box-shadow: 0 0 4px #4CAF50;
+        }
+        
+        .species-audio-status.muted {
+            background: #f44336;
+            box-shadow: 0 0 4px #f44336;
         }
         
         /* Collapsible Sections */
@@ -713,7 +818,23 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .audio-controls-group {
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .audio-controls-group h4 {
+            margin: 0 0 10px 0;
+            color: #ccc;
+            font-size: 13px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
         }
         
         .grain-activity {
@@ -754,6 +875,170 @@
             background: linear-gradient(to right, #4CAF50, #FFC107, #FF5722);
             width: 0%;
             transition: width 0.1s ease;
+        }
+        
+        /* Rotary Dial for Ratio Control */
+        .ratio-dial-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 12px;
+        }
+        
+        .ratio-dial {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #333;
+            border: 3px solid #555;
+            position: relative;
+            cursor: pointer;
+            transition: border-color 0.2s ease;
+        }
+        
+        .ratio-dial:hover {
+            border-color: #4CAF50;
+        }
+        
+        .ratio-dial-indicator {
+            position: absolute;
+            top: 3px;
+            left: 50%;
+            width: 3px;
+            height: 20px;
+            background: #4CAF50;
+            transform-origin: center bottom;
+            transform: translateX(-50%) rotate(0deg);
+            border-radius: 2px;
+            transition: transform 0.1s ease;
+        }
+        
+        .ratio-dial-label {
+            font-size: 12px;
+            color: #ccc;
+            margin-bottom: 4px;
+        }
+        
+        .ratio-dial-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #4CAF50;
+            text-align: center;
+        }
+        
+        /* Keyboard Shortcuts Display */
+        .keyboard-shortcuts {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #111;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 15px;
+            color: #ccc;
+            font-size: 12px;
+            font-family: monospace;
+            line-height: 1.4;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            min-width: 200px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        
+        .keyboard-shortcuts.hidden {
+            opacity: 0;
+            transform: translateX(100%);
+            pointer-events: none;
+        }
+        
+        .shortcuts-header {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 4px;
+        }
+        
+        .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        
+        .shortcut-key {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .shortcut-action {
+            color: #ccc;
+        }
+        
+        .shortcuts-toggle {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 50%;
+            color: #ccc;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            transition: all 0.2s ease;
+        }
+        
+        .shortcuts-toggle:hover {
+            background: #444;
+            color: #fff;
+        }
+        
+        /* Performance Metrics Display */
+        .performance-metrics {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: #111;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 12px;
+            color: #ccc;
+            font-size: 12px;
+            font-family: monospace;
+            line-height: 1.4;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            min-width: 150px;
+        }
+        
+        .metrics-header {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-bottom: 6px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 3px;
+            font-size: 11px;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        
+        .metric-label {
+            color: #888;
+        }
+        
+        .metric-value {
+            color: #4CAF50;
+            font-weight: bold;
         }
         
     </style>
@@ -817,16 +1102,6 @@
             </div>
         </div>
 
-        <div class="control-group">
-            <h3>Species Configuration</h3>
-            <div class="slider-row">
-                <label>Species Count</label>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="speciesCount" min="2" max="8" step="1" value="2">
-                    <span class="value-display" id="speciesCount-value">2</span>
-                </div>
-            </div>
-        </div>
 
         <div class="collapsible-section" id="forceMatrixSection">
             <div class="collapsible-header" onclick="toggleCollapsible('forceMatrixSection')">
@@ -856,51 +1131,6 @@
                                 <div class="legend-color" style="background: #44ff44;"></div>
                                 <span>Attraction (+1.0)</span>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="collapsible-section" id="performanceSection">
-            <div class="collapsible-header" onclick="toggleCollapsible('performanceSection')">
-                <h3>Performance Metrics</h3>
-                <span class="collapsible-toggle">▼</span>
-            </div>
-            <div class="collapsible-content" id="performanceContent">
-                <div class="collapsible-inner">
-                    <div style="font-size: 12px; color: #888; line-height: 1.6;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>FPS:</span>
-                            <span id="fps-display" style="color: #4CAF50; font-family: monospace;">60</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Frame Time:</span>
-                            <span id="frame-time" style="color: #4CAF50; font-family: monospace;">16.7ms</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Canvas:</span>
-                            <span id="canvas-size" style="color: #4CAF50; font-family: monospace;">1200×800</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Particles:</span>
-                            <span id="total-particles" style="color: #4CAF50; font-family: monospace;">400</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Trail Particles:</span>
-                            <span id="trail-particles" style="color: #4CAF50; font-family: monospace;">0</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Spatial Grid:</span>
-                            <span id="grid-info" style="color: #4CAF50; font-family: monospace;">Active</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span>Audio Grains:</span>
-                            <span id="total-grains" style="color: #4CAF50; font-family: monospace;">0</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>Audio Latency:</span>
-                            <span id="audio-latency" style="color: #4CAF50; font-family: monospace;">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -962,6 +1192,17 @@
         <!-- Audio Engine Panel -->
         <div class="tab-panel" id="audio-panel">
             <div class="control-panel audio-panel">
+                
+                <div class="control-group">
+                    <h3>Species Configuration</h3>
+                    <div class="slider-row">
+                        <label>Species Count</label>
+                        <div class="slider-container">
+                            <input type="range" class="slider" id="speciesCount" min="2" max="8" step="1" value="2">
+                            <span class="value-display" id="speciesCount-value">2</span>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="control-group">
                     <h3>Master Audio Controls</h3>
@@ -1036,6 +1277,65 @@
     <!-- Centered Canvas -->
     <div class="main-content">
         <canvas id="canvas"></canvas>
+    </div>
+    
+    <!-- Performance Metrics Display -->
+    <div id="performanceMetrics" class="performance-metrics">
+        <div class="metrics-header">⚡ METRICS</div>
+        <div class="metric-row">
+            <span class="metric-label">FPS:</span>
+            <span id="fps-display" class="metric-value">60</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Canvas:</span>
+            <span id="canvas-size" class="metric-value">1200×800</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Particles:</span>
+            <span id="total-particles" class="metric-value">400</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Audio grains:</span>
+            <span id="total-grains" class="metric-value">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Audio latency:</span>
+            <span id="audio-latency" class="metric-value">N/A</span>
+        </div>
+    </div>
+    
+    <!-- Keyboard Shortcuts Display -->
+    <div id="keyboardShortcuts" class="keyboard-shortcuts">
+        <div class="shortcuts-toggle" onclick="toggleKeyboardShortcuts()" title="Hide shortcuts">×</div>
+        <div class="shortcuts-header">🎹 SHORTCUTS</div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">Space</span>
+            <span class="shortcut-action">Pause/Resume</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">R</span>
+            <span class="shortcut-action">Reset</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">M</span>
+            <span class="shortcut-action">Master mute</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">S</span>
+            <span class="shortcut-action">Solo species</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">+/-</span>
+            <span class="shortcut-action">Volume</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">1-8</span>
+            <span class="shortcut-action">Species tabs</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">H</span>
+            <span class="shortcut-action">Show shortcuts</span>
+        </div>
     </div>
 
     <!-- ===== JAVASCRIPT MODULES ===== -->
@@ -1603,6 +1903,11 @@
                 const audioStatus = document.createElement('div');
                 audioStatus.className = 'species-audio-status';
                 audioStatus.id = `species-audio-status-${i}`;
+                audioStatus.title = 'Click to mute/unmute';
+                audioStatus.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent tab selection when clicking the status
+                    toggleSpeciesMute(i);
+                });
                 
                 info.appendChild(particleCount);
                 info.appendChild(audioStatus);
@@ -1649,8 +1954,19 @@
                 const statusElement = document.getElementById(`species-audio-status-${i}`);
                 if (statusElement && speciesAudioSynths[i]) {
                     const hasAudio = speciesAudioSynths[i].audioBuffer && isAudioEnabled;
-                    const isActive = hasAudio && !speciesAudioSynths[i].isMuted;
-                    statusElement.classList.toggle('active', isActive);
+                    const isMuted = speciesAudioSynths[i].isMuted;
+                    const isActive = hasAudio && !isMuted;
+                    
+                    // Reset classes
+                    statusElement.classList.remove('active', 'muted');
+                    
+                    if (hasAudio) {
+                        if (isMuted) {
+                            statusElement.classList.add('muted');
+                        } else {
+                            statusElement.classList.add('active');
+                        }
+                    }
                 }
             }
         }
@@ -1730,7 +2046,7 @@
                         
                     case 'KeyH':
                         e.preventDefault();
-                        showKeyboardHelp();
+                        toggleKeyboardShortcuts();
                         break;
                 }
             });
@@ -1764,13 +2080,9 @@
                 for (let i = 0; i < speciesCount; i++) {
                     if (speciesAudioSynths[i]) {
                         speciesAudioSynths[i].setMute(false);
-                        const button = document.getElementById(`speciesMute${i}`);
-                        if (button) {
-                            button.textContent = '🔊';
-                            button.classList.add('active');
-                        }
                     }
                 }
+                updateSpeciesTabInfo();
                 showToast('All Species Unmuted');
             } else {
                 // Solo current species
@@ -1778,32 +2090,38 @@
                     const shouldMute = i !== currentSpeciesTab;
                     if (speciesAudioSynths[i]) {
                         speciesAudioSynths[i].setMute(shouldMute);
-                        const button = document.getElementById(`speciesMute${i}`);
-                        if (button) {
-                            button.textContent = shouldMute ? '🔇' : '🔊';
-                            button.classList.toggle('active', !shouldMute);
-                        }
                     }
                 }
+                updateSpeciesTabInfo();
                 showToast(`Species ${String.fromCharCode(65 + currentSpeciesTab)} Soloed`);
             }
         }
         
-        function showKeyboardHelp() {
-            const helpText = `
-🎹 KEYBOARD SHORTCUTS:
-
-Space     - Pause/Resume simulation
-R         - Reset simulation
-M         - Master mute toggle
-S         - Solo current species
-+/-       - Adjust master volume
-1-8       - Switch species tabs
-H         - Show this help
-
-📱 Click OK to dismiss`;
+        function toggleKeyboardShortcuts() {
+            const shortcuts = document.getElementById('keyboardShortcuts');
+            const isHidden = shortcuts.classList.contains('hidden');
             
-            alert(helpText);
+            if (isHidden) {
+                shortcuts.classList.remove('hidden');
+                showToast('Shortcuts shown');
+            } else {
+                shortcuts.classList.add('hidden');
+                showToast('Shortcuts hidden');
+            }
+            
+            // Save state to localStorage
+            localStorage.setItem('keyboardShortcuts-hidden', (!isHidden).toString());
+        }
+        
+        function initKeyboardShortcutsDisplay() {
+            const shortcuts = document.getElementById('keyboardShortcuts');
+            const isHidden = localStorage.getItem('keyboardShortcuts-hidden') === 'true';
+            
+            if (isHidden) {
+                shortcuts.classList.add('hidden');
+            }
+            
+            console.log('⌨️ Keyboard shortcuts display initialized');
         }
         
         // ===== TOAST NOTIFICATIONS =====
@@ -2207,14 +2525,11 @@ H         - Show this help
         initCollapsibleSections();
         createSpeciesTabs();
         initKeyboardShortcuts();
+        initKeyboardShortcutsDisplay();
         initPresetSystem();
         
         animate(); // Use original animation loop from physics-core.js
         
-        // Show welcome message
-        setTimeout(() => {
-            showToast('Press H for keyboard shortcuts', 3000);
-        }, 1000);
     </script>
 </body>
 </html>

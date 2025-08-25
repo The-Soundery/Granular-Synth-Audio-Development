@@ -7,7 +7,7 @@ const path = require('path');
 console.log('🔧 Building combined HTML file...');
 
 // Read the main HTML template
-const htmlPath = path.join(__dirname, 'Granular Particle Sim Audio Build.html');
+const htmlPath = path.join(__dirname, 'Granular-Particle-Sim-Modular.html');
 let html = fs.readFileSync(htmlPath, 'utf8');
 
 // Read the JavaScript modules

@@ -223,6 +223,11 @@ class Particle {
                 this.lastCollisionTime = currentTime;
                 other.lastCollisionTime = currentTime;
                 
+                // Debug logging (very rarely to avoid spam)
+                if (Math.random() < 0.001) {
+                    console.log(`💥 Collision detected - Species ${this.species} <-> ${other.species}, Force: ${collisionForce.toFixed(3)}`);
+                }
+                
                 // Apply mutual velocity damping on collision (both particles affected)
                 this.vx *= 0.7;
                 this.vy *= 0.7;
@@ -715,6 +720,11 @@ function animate() {
         // Update species tab info
         if (typeof updateSpeciesTabInfo === 'function') {
             updateSpeciesTabInfo();
+        }
+        
+        // Update species activity levels for audio visualization
+        if (typeof updateSpeciesActivityLevels === 'function') {
+            updateSpeciesActivityLevels(particles);
         }
         
         frameCount = 0;
