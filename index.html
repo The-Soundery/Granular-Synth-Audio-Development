@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Granular Particle Sim Synth</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- Tab Navigation Header -->
+    <div class="tab-header">
+        <button class="tab-button active" data-tab="physics">
+            ⚛️ Physics & Simulation
+        </button>
+        <button class="tab-button" data-tab="audio">
+            🎵 Audio & Synthesis
+        </button>
+    </div>
+
+    <!-- Tabbed Control Panels -->
+    <div class="tab-content">
+        <!-- Physics & Simulation Panel -->
+        <div class="tab-panel active" id="physics-panel">
+            <div class="control-panel physics-panel">
+        <div class="collapsible-section" id="presetSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('presetSection')">
+                <h3>Presets & Control</h3>
+                <span class="collapsible-toggle">▼</span>
+            </div>
+            <div class="collapsible-content" id="presetContent">
+                <div class="collapsible-inner">
+                    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <button onclick="savePreset()" style="flex: 1; background: #2a5f2a; font-size: 12px; padding: 8px;">💾 Save</button>
+                        <button onclick="loadPreset()" style="flex: 1; background: #2a2a5f; font-size: 12px; padding: 8px;">📁 Load</button>
+                        <button onclick="exportPreset()" style="flex: 1; background: #5f2a5f; font-size: 12px; padding: 8px;">📤 Export</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                        <select id="presetSelect" style="flex: 1; background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 3px; font-size: 12px;">
+                            <option value="">Select Preset...</option>
+                        </select>
+                        <button onclick="deletePreset()" style="background: #5f2a2a; font-size: 12px; padding: 5px 10px;">🗑️</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button onclick="resetSimulation()" style="flex: 1; font-size: 12px; padding: 8px;">🔄 Reset</button>
+                        <button onclick="togglePause()" style="flex: 1; font-size: 12px; padding: 8px;">⏯️ Pause</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="slider-row">
+                <label for="canvas-width">Canvas Width</label>
+                <div class="slider-container">
+                    <span class="draggable-number" id="canvas-width" role="spinbutton" aria-valuenow="1200" aria-valuemin="400" aria-valuemax="1600">1200</span>
+                    <span style="color: #888; font-size: 12px;">px</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label for="canvas-height">Canvas Height</label>
+                <div class="slider-container">
+                    <span class="draggable-number" id="canvas-height" role="spinbutton" aria-valuenow="800" aria-valuemin="300" aria-valuemax="1200">800</span>
+                    <span style="color: #888; font-size: 12px;">px</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Species Configuration</h3>
+            <div class="slider-row">
+                <label for="speciesCount">Species Count</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="speciesCount" min="2" max="8" step="1" value="2">
+                    <span class="value-display" id="speciesCount-value">2</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="collapsible-section" id="speciesTabSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('speciesTabSection')">
+                <h3>Individual Species Controls</h3>
+                <span class="collapsible-toggle">▼</span>
+            </div>
+            <div class="collapsible-content" id="speciesTabContent">
+                <div class="collapsible-inner">
+                    <div class="species-tab-container">
+                        <div class="species-tabs" id="speciesTabs">
+                            <!-- Species tabs will be generated dynamically -->
+                        </div>
+                    </div>
+                    <div class="species-controls-container" id="speciesControls">
+                        <!-- Species controls will be generated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="collapsible-section" id="forceMatrixSection">
+            <div class="collapsible-header" onclick="toggleCollapsible('forceMatrixSection')">
+                <h3>Force Relationships</h3>
+                <span class="collapsible-toggle">▼</span>
+            </div>
+            <div class="collapsible-content" id="forceMatrixContent">
+                <div class="collapsible-inner">
+                    <div class="matrix-container">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin: 0 0 10px 0;">
+                            <h4 style="margin: 0; color: #ccc; font-size: 14px;">Force Relationship Matrix</h4>
+                            <button id="randomizeMatrix" onclick="randomizeForceMatrix()" style="background: #444; color: #fff; border: none; padding: 4px 8px; cursor: pointer; border-radius: 3px; font-size: 12px;">🎲 Randomize</button>
+                        </div>
+                        <div class="matrix-grid" id="forceMatrix">
+                            <!-- Matrix will be generated dynamically -->
+                        </div>
+                        <div class="force-legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #ff4444;"></div>
+                                <span>Repulsion (-1.0)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #666;"></div>
+                                <span>Neutral (0.0)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #44ff44;"></div>
+                                <span>Attraction (+1.0)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Physics Settings</h3>
+            <div class="slider-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="toroidalSpace" checked style="margin-right: 8px;">
+                    Toroidal Space (Edge Wrapping)
+                </label>
+            </div>
+            <div class="slider-row">
+                <label for="friction">Friction</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="friction" min="0.85" max="1.0" step="0.01" value="0.95">
+                    <span class="value-display" id="friction-value">0.95</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label for="forceRadius">Force Radius</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="forceRadius" min="20" max="200" step="10" value="60">
+                    <span class="value-display" id="forceRadius-value">60</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label for="simSpeed">Simulation Speed</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="simSpeed" min="0.1" max="2.0" step="0.1" value="1.0">
+                    <span class="value-display" id="simSpeed-value">1.0</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label for="gravityStrength">Gravity Strength</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="gravityStrength" min="0.0" max="10.0" step="0.05" value="0.0">
+                    <span class="value-display" id="gravityStrength-value">0.0</span>
+                </div>
+            </div>
+            <div class="slider-row">
+                <label for="bounceDamping">Wall Bounce Damping</label>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="bounceDamping" min="0.5" max="1.5" step="0.1" value="0.8">
+                    <span class="value-display" id="bounceDamping-value">0.8</span>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-top: 8px;">
+                Click and hold on simulation to create gravity pull
+            </div>
+        </div>
+
+            </div>
+        </div>
+
+        <!-- Audio & Synthesis Panel -->
+        <div class="tab-panel" id="audio-panel">
+            <div class="control-panel audio-panel">
+
+                <div class="control-group">
+                    <button id="startAudio" onclick="AudioSystem.init()" class="audio-button">🎵 Start Audio Engine</button>
+                    <button id="stopAudio" onclick="AudioSystem.shutdown()" class="audio-button stop" style="display: none;">⏹️ Stop Audio Engine</button>
+                </div>
+
+                <div class="control-group">
+                    <div class="slider-row">
+                        <label for="showActiveVoices">Show Active Voices</label>
+                        <div class="toggle-container">
+                            <input type="checkbox" id="showActiveVoices" class="toggle-checkbox" checked>
+                            <label for="showActiveVoices" class="toggle-label">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <label for="voiceStealingDelay">Voice Stealing Delay (ms)</label>
+                        <div class="slider-container">
+                            <span class="draggable-number" id="voiceStealingDelay" role="spinbutton" aria-valuenow="50" aria-valuemin="1" aria-valuemax="500" data-min="1" data-max="500" data-step="1">50</span>
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <label for="voiceStealingCrossfade">Voice Stealing Crossfade (ms)</label>
+                        <div class="slider-container">
+                            <span class="draggable-number" id="voiceStealingCrossfade" role="spinbutton" aria-valuenow="50" aria-valuemin="10" aria-valuemax="500" data-min="10" data-max="500" data-step="1">50</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="collapsible-section" id="audioSamplesSection">
+                    <div class="collapsible-header" onclick="toggleCollapsible('audioSamplesSection')">
+                        <h3>Audio Samples</h3>
+                        <span class="collapsible-toggle">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="audioSamplesContent">
+                        <div class="collapsible-inner">
+                            <div class="audio-species-tab-container">
+                                <div class="audio-species-tabs" id="audioSpeciesTabs">
+                                    <!-- Audio species tabs will be generated dynamically -->
+                                </div>
+                            </div>
+                            <div class="audio-species-content" id="audioSamplesContainer">
+                                <!-- Audio sample controls for active species will be generated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="collapsible-section" id="granularParametersSection">
+                    <div class="collapsible-header" onclick="toggleCollapsible('granularParametersSection')">
+                        <h3>Granular Parameters</h3>
+                        <span class="collapsible-toggle">▼</span>
+                    </div>
+                    <div class="collapsible-content" id="granularParametersContent">
+                        <div class="collapsible-inner">
+
+                            <!-- Velocity → Gain Curve -->
+                            <div class="slider-row">
+                                <label for="curveParameter">Velocity Curve Power</label>
+                                <div class="slider-container">
+                                    <input type="range" class="slider" id="curveParameter" min="0.1" max="4.0" step="0.1" value="1.0">
+                                    <span class="value-display" id="curveParameter-value">1.0</span>
+                                </div>
+                            </div>
+
+                            <!-- Curve Graph -->
+                            <div class="slider-row">
+                                <div style="width: 100%; height: 80px; background: #0a0a0a; border: 1px solid #333; border-radius: 3px; position: relative;">
+                                    <canvas id="curveGraph" width="350" height="80" style="width: 100%; height: 100%; display: block;" aria-label="Curve Shape Visualization"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Volume Scale -->
+                            <div class="slider-row">
+                                <label for="volumeScale">Volume Scale</label>
+                                <div class="slider-container">
+                                    <input type="range" class="slider" id="volumeScale" min="0.1" max="2.0" step="0.1" value="1.0">
+                                    <span class="value-display" id="volumeScale-value">1.0</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Audio Engine Status</h3>
+                    <div style="font-size: 12px; color: #888; margin-bottom: 10px;">
+                        <div>Status: <span id="audioStatus" style="color: #ccc;">Stopped</span></div>
+                        <div>Sample Rate: <span id="sampleRate" style="color: #ccc;">-</span></div>
+                        <div>Buffer Size: <span id="bufferSize" style="color: #ccc;">-</span></div>
+                    </div>
+
+                    <!-- Volume Meter -->
+                    <div style="margin-top: 15px;">
+                        <div style="width: 100%; height: 20px; background: #0a0a0a; border: 1px solid #333; border-radius: 3px; position: relative; overflow: hidden;" role="meter" aria-label="Audio Level" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            <div id="volumeMeter" style="height: 100%; background: linear-gradient(to right, #4CAF50, #FFC107, #FF5722); width: 0%; transition: width 0.1s ease;"></div>
+                            <span id="volumeText" style="position: absolute; top: 3px; left: 5px; font-size: 10px; color: #fff; text-shadow: 1px 1px 1px #000;">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Centered Canvas -->
+    <div class="main-content">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Performance Metrics Display -->
+    <div id="performanceMetrics" class="performance-metrics">
+        <div class="metrics-header">⚡ METRICS</div>
+        <div class="metric-row">
+            <span class="metric-label">FPS:</span>
+            <span id="fps-display" class="metric-value">60</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Canvas:</span>
+            <span id="canvas-size" class="metric-value">1200×800</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Particles:</span>
+            <span id="total-particles" class="metric-value">400</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Trail particles:</span>
+            <span id="trail-particles" class="metric-value">0</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Grid:</span>
+            <span id="grid-info" class="metric-value">20×14</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Audio:</span>
+            <span id="audio-particles" class="metric-value">0</span>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Display -->
+    <div id="keyboardShortcuts" class="keyboard-shortcuts">
+        <div class="shortcuts-toggle" onclick="toggleKeyboardShortcuts()" title="Hide shortcuts">×</div>
+        <div class="shortcuts-header">🎹 SHORTCUTS</div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">Space</span>
+            <span class="shortcut-action">Pause/Resume</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">R</span>
+            <span class="shortcut-action">Reset</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">1-8</span>
+            <span class="shortcut-action">Species tabs</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">H</span>
+            <span class="shortcut-action">Show shortcuts</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="shortcut-key">A</span>
+            <span class="shortcut-action">Audio tab</span>
+        </div>
+    </div>
+
+    <!-- Module Imports -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
