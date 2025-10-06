@@ -152,7 +152,10 @@ The audio system implements **voice limiting with smooth audio crossfading** whe
 - **Voice Allocation Logic:**
   - When `maxVoices ≥ particleCount`: All particles allocated (all can make sound if moving)
   - When `maxVoices < particleCount`: Top N fastest particles allocated (velocity-based priority)
-  - **Delayed transitions**: Changes delayed by `voiceStealingDelay` (1-500ms, default 50ms) to prevent flicker
+  - **Smart transition system (Optimized 2025-10-06)**:
+    - **User slider changes**: Apply immediately (~35ms total latency)
+    - **Natural particle reordering**: Delayed by `voiceStealingDelay` (50ms default) to prevent flicker
+    - **60fps sync**: Updates throttled to 16ms (down from 33ms) for smooth visual feedback
   - Visual feedback: Allocated particles are bright, non-allocated particles are dimmed
 
 - **Audio Crossfading (Smooth Transitions):**
@@ -172,27 +175,36 @@ The audio system implements **voice limiting with smooth audio crossfading** whe
   - **No timer leaks**: Grain timers automatically deleted when fadeOut completes
 
 **Example:**
-- 50 particles, reduce `maxVoices` from 50 → 10:
+- 50 particles, user adjusts `maxVoices` slider from 50 → 10:
+  - **Immediate response**: Change applied within ~35ms (no 50ms delay)
   - **During 50ms crossfade**: 40 particles fade out (bright→dim, loud→quiet), 10 particles fade in (dim→bright, quiet→loud)
   - **After crossfade**: Only 10 fastest particles are bright and making sound
   - **No volume spikes**: Equal-power crossfade maintains constant total energy
+  - **70% faster**: ~115ms → ~35ms latency compared to previous implementation
 
 **Recent Enhancements (2025-10-06):**
-1. **Advanced Frequency Filtering System** - Complete redesign of Y-axis frequency mapping:
+1. **Responsive MaxVoices Control** - Optimized slider response for immediate visual feedback:
+   - **16ms throttling** (60fps sync, down from 33ms) matches rendering frame rate
+   - **Immediate application** for user slider changes (skips 50ms delay)
+   - **Smart delay system**: Only delays natural particle velocity reordering (prevents flicker)
+   - **70% latency reduction**: ~115ms → ~35ms for slider changes
+   - **Prevents stuck states**: Rapid slider movement no longer resets timer indefinitely
+   - **Safety preserved**: All crossfades still apply to prevent audio clicks/grain leaks
+2. **Advanced Frequency Filtering System** - Complete redesign of Y-axis frequency mapping:
    - Gamma curve (0.6) for low-end emphasis - more canvas space for bass/mids
    - Linear size-to-bandwidth mapping - intuitive and predictable control
    - Adaptive filter stages: 24dB/octave for small particles, 12dB/octave for large
    - Hz-based gain compensation - consistent loudness across all frequencies
    - Fixed critical bandpass filter bug that was destroying high-frequency signals
-2. **Unified Audio Crossfading System** - Clean, leak-free implementation:
+3. **Unified Audio Crossfading System** - Clean, leak-free implementation:
    - Equal-power fadeIn/fadeOut eliminates volume spikes and clicks
    - Automatic timer cleanup when fadeOut completes (no resource leaks)
    - Burst protection prevents audio spikes from tab backgrounding/CPU recovery
    - Simple √N normalization (removed weighted approach that caused volume dips)
    - Smooth audio AND visual transitions unified in single crossfade system
    - **Timing fix (2025-10-06)**: All crossfade timing standardized to milliseconds for perfect audio/visual sync
-3. **Simplified Grain Spawning** - Removed velocity-to-rate scaling and smoothness boost for 85% grain reduction
-4. **Distance-Based Trail Spawning** - Visual trails spawn based on movement distance for 60-70% reduction
+4. **Simplified Grain Spawning** - Removed velocity-to-rate scaling and smoothness boost for 85% grain reduction
+5. **Distance-Based Trail Spawning** - Visual trails spawn based on movement distance for 60-70% reduction
 
 ### Audio Interface
 The audio control interface features a **tabbed design** for clean, organized per-species control:

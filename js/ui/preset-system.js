@@ -16,6 +16,7 @@ export function getCurrentState() {
         timestamp: new Date().toISOString(),
         canvasWidth: CONFIG.canvas.width,
         canvasHeight: CONFIG.canvas.height,
+        canvasBackgroundColor: CONFIG.canvas.backgroundColor,
         speciesCount: CONFIG.species.count,
         particleCounts: [...CONFIG.species.counts],
         particleSizes: [...CONFIG.species.sizes],
@@ -38,6 +39,15 @@ export function applyState(presetState) {
         }
 
         updateCanvasSize(presetState.canvasWidth || 1200, presetState.canvasHeight || 800);
+
+        // Update canvas background color
+        if (presetState.canvasBackgroundColor) {
+            CONFIG.canvas.backgroundColor = presetState.canvasBackgroundColor;
+            const canvasColorPicker = safeGetElement('canvas-color');
+            if (canvasColorPicker) {
+                canvasColorPicker.value = presetState.canvasBackgroundColor;
+            }
+        }
 
         CONFIG.species.count = presetState.speciesCount || 2;
         updateElementValue('speciesCount', CONFIG.species.count);

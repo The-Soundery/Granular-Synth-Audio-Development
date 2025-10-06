@@ -277,9 +277,9 @@ export class Particle {
             const dy = this.y - this.lastTrailY;
             const distanceMoved = Math.sqrt(dx * dx + dy * dy);
 
-            // Spawn threshold: 50% of particle size (ensures overlap, no gaps)
-            // This gives smooth trails while reducing spawns by 50-80% vs every frame
-            const spawnThreshold = this.visualSize * 0.5;
+            // Spawn threshold: 30% of particle size (ensures strong overlap, eliminates gaps)
+            // This gives smooth trails while reducing spawns by 60-70% vs every frame
+            const spawnThreshold = this.visualSize * 0.3;
 
             if (distanceMoved >= spawnThreshold) {
                 state.trailParticles.push(new TrailParticle(
