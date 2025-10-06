@@ -476,11 +476,18 @@ export function createAudioSampleControls() {
     voicesSlider.min = '1';
     voicesSlider.max = particleCount.toString();
     voicesSlider.step = '1';
-    voicesSlider.value = (CONFIG.species.maxVoicesPerSpecies[i] || 4).toString();
+
+    // Ensure maxVoices is clamped to current particle count
+    let currentMaxVoices = CONFIG.species.maxVoicesPerSpecies[i] || 4;
+    if (currentMaxVoices > particleCount) {
+        currentMaxVoices = particleCount;
+        CONFIG.species.maxVoicesPerSpecies[i] = particleCount;
+    }
+    voicesSlider.value = currentMaxVoices.toString();
     voicesSlider.id = `voices-${i}`;
 
     const voicesValue = Utils.createElement('span', 'audio-control-value');
-    voicesValue.textContent = CONFIG.species.maxVoicesPerSpecies[i] || 4;
+    voicesValue.textContent = currentMaxVoices;
     voicesValue.id = `voices-${i}-value`;
 
     const voicesHandler = (e) => {
@@ -555,42 +562,57 @@ function getCanvasPosition(event, canvas) {
 
 // Voice slider updates (referenced from force-matrix.js)
 export function updateVoiceSliders() {
-    console.log('[updateVoiceSliders] Called');
+    console.log('[updateVoiceSliders] Called - updating ALL species');
 
     // Ensure current tab is valid
     if (currentAudioSpeciesTab >= CONFIG.species.count) {
         currentAudioSpeciesTab = Math.max(0, CONFIG.species.count - 1);
     }
 
-    // Only update the currently visible species
-    const i = currentAudioSpeciesTab;
-    const voiceSlider = safeGetElement(`voices-${i}`);
-    const voiceValue = safeGetElement(`voices-${i}-value`);
-    const voiceLabel = voiceSlider?.parentElement?.previousElementSibling;
+    let needsAudioUpdate = false;
 
-    console.log(`[updateVoiceSliders] Species ${i}: slider=${!!voiceSlider}, value=${!!voiceValue}`);
+    // Update ALL species sliders, not just the currently visible one
+    for (let i = 0; i < CONFIG.species.count; i++) {
+        const voiceSlider = safeGetElement(`voices-${i}`);
+        const voiceValue = safeGetElement(`voices-${i}-value`);
+        const voiceLabel = voiceSlider?.parentElement?.previousElementSibling;
 
-    if (voiceSlider && voiceValue) {
-        // Update max attribute to match current particle count
-        const particleCount = CONFIG.species.counts[i];
-        const oldMax = voiceSlider.max;
-        voiceSlider.max = particleCount.toString();
+        // Only update if slider exists (it exists for the currently visible tab)
+        if (voiceSlider && voiceValue) {
+            // Update max attribute to match current particle count
+            const particleCount = CONFIG.species.counts[i];
+            const oldMax = voiceSlider.max;
+            voiceSlider.max = particleCount.toString();
 
-        // Update label to show new max
-        if (voiceLabel) {
-            voiceLabel.textContent = `Max Voices (1-${particleCount})`;
+            // Update label to show new max
+            if (voiceLabel) {
+                voiceLabel.textContent = `Max Voices (1-${particleCount})`;
+            }
+
+            console.log(`[updateVoiceSliders] Species ${i}: Updated max from ${oldMax} to ${particleCount}`);
+
+            // If current value exceeds new particle count, clamp it down
+            if (CONFIG.species.maxVoicesPerSpecies[i] > particleCount) {
+                CONFIG.species.maxVoicesPerSpecies[i] = particleCount;
+                voiceSlider.value = particleCount;
+                voiceValue.textContent = particleCount;
+                console.log(`[updateVoiceSliders] Species ${i}: Clamped maxVoices to ${particleCount}`);
+                needsAudioUpdate = true;
+            }
+        } else {
+            // Slider doesn't exist (not currently visible tab), but still clamp the config value
+            const particleCount = CONFIG.species.counts[i];
+            if (CONFIG.species.maxVoicesPerSpecies[i] > particleCount) {
+                CONFIG.species.maxVoicesPerSpecies[i] = particleCount;
+                console.log(`[updateVoiceSliders] Species ${i}: Clamped maxVoices to ${particleCount} (slider not visible)`);
+                needsAudioUpdate = true;
+            }
         }
+    }
 
-        console.log(`[updateVoiceSliders] Species ${i}: Updated max from ${oldMax} to ${particleCount}`);
-
-        // If current value exceeds new particle count, clamp it down
-        if (CONFIG.species.maxVoicesPerSpecies[i] > particleCount) {
-            CONFIG.species.maxVoicesPerSpecies[i] = particleCount;
-            voiceSlider.value = particleCount;
-            voiceValue.textContent = particleCount;
-            console.log(`[updateVoiceSliders] Species ${i}: Clamped maxVoices to ${particleCount}`);
-            AudioSystem.updateParameters({ voices: true });
-        }
+    // Send audio update once if any species was clamped
+    if (needsAudioUpdate) {
+        AudioSystem.updateParameters({ voices: true });
     }
 
     // Also update the tabs to refresh status icons
