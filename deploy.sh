@@ -1,7 +1,23 @@
 #!/bin/bash
 
 # GitHub Pages Deployment Script for Granular Particle Synth
-# This script deploys the project to the gh-pages branch
+#
+# DEPLOYMENT ARCHITECTURE:
+# This project uses a two-branch system to separate development from production:
+#   - main branch: Development code (all source files, build tools, docs)
+#   - gh-pages branch: Production deployment (only runtime files)
+#
+# WHAT THIS SCRIPT DOES:
+# 1. Packages only production files (HTML, JS, CSS, favicon)
+# 2. Switches to gh-pages branch (creates if needed)
+# 3. Replaces all files with new deployment
+# 4. Force-pushes to origin/gh-pages
+# 5. Returns to your original branch
+#
+# IMPORTANT: Changes to main branch do NOT automatically update the live site.
+# You must run this script (npm run deploy) after every change you want published.
+#
+# Live Site: https://the-soundery.github.io/Granular-Synth-Audio-Development/
 
 set -e  # Exit on error
 
@@ -34,7 +50,12 @@ TEMP_DIR=$(mktemp -d)
 echo "📦 Creating deployment package in $TEMP_DIR..."
 
 # Copy all necessary files to temp directory
-cp -r index.html js/ styles/ favicon.ico .nojekyll "$TEMP_DIR/" 2>/dev/null || true
+# Important: Preserve directory structure (styles/, js/) for correct file paths
+cp index.html "$TEMP_DIR/" 2>/dev/null || true
+cp favicon.ico "$TEMP_DIR/" 2>/dev/null || true
+cp .nojekyll "$TEMP_DIR/" 2>/dev/null || true
+cp -r js/ "$TEMP_DIR/js/" 2>/dev/null || true
+cp -r styles/ "$TEMP_DIR/styles/" 2>/dev/null || true
 
 # Check if gh-pages branch exists
 if git show-ref --verify --quiet refs/heads/gh-pages; then

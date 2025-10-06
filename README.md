@@ -18,7 +18,15 @@ npm run dev
 
 ### GitHub Pages Deployment
 
-Deploy your synthesizer to share with others:
+**Live Site:** https://the-soundery.github.io/Granular-Synth-Audio-Development/
+
+This project uses a **two-branch deployment system**:
+- **`main` branch** = Development code (includes build scripts, deploy tools, documentation)
+- **`gh-pages` branch** = Production deployment (only runtime files: HTML, JS, CSS)
+
+**⚠️ Important:** Changes to `main` branch do NOT automatically update the live site. You must manually run `npm run deploy` after every change you want to publish.
+
+#### First-Time Setup
 
 ```bash
 # 1. Connect to your GitHub repository (if not already connected)
@@ -32,10 +40,10 @@ npm run deploy
 # https://the-soundery.github.io/Granular-Synth-Audio-Development/
 ```
 
-**Note**: After first deployment, enable GitHub Pages in your repository settings:
-1. Go to Settings > Pages
-2. Source should be set to `gh-pages` branch
-3. Wait 1-2 minutes for deployment to complete
+**After first deployment**, verify GitHub Pages settings:
+1. Go to https://github.com/The-Soundery/Granular-Synth-Audio-Development/settings/pages
+2. Source should be set to `gh-pages` branch (auto-configured)
+3. Wait 1-2 minutes for initial deployment to complete
 
 ## 📁 Project Structure
 
@@ -309,6 +317,175 @@ CONFIG.physics.orbitalStrength = 0.1;
 - **Orbital Systems**: `beta` + `enableOrbitalForces`
 - **Accurate Simulation**: `useVerletIntegration` + `useDynamicFriction`
 - **Chaotic Energy**: `piecewise` + `enableOrbitalForces` + high force values
+
+## 🔄 Deployment Architecture
+
+### Two-Branch System
+
+This project uses a **dual-branch deployment strategy** to separate development from production:
+
+| Branch | Purpose | Contains | Deployed To |
+|--------|---------|----------|-------------|
+| `main` | Development | All source files, build scripts, deploy tools, docs, package.json | GitHub repository only |
+| `gh-pages` | Production | **Only** runtime files: index.html, js/, styles/, favicon.ico, .nojekyll | GitHub Pages (live site) |
+
+### Why Manual Deployment?
+
+**Changes to `main` do NOT automatically update the live site.** This design is intentional:
+
+✅ **Benefits:**
+- Test changes locally (`npm run dev`) before publishing
+- Prevent accidental broken deployments
+- Control exactly when updates go live
+- Keep development files (build.js, deploy.sh) out of production
+- Maintain clean production branch with only essential files
+
+❌ **What NOT to do:**
+- Don't manually edit `gh-pages` branch (it gets force-pushed)
+- Don't expect `git push` to update the live site
+- Don't commit directly to `gh-pages` (changes will be overwritten)
+
+### What Gets Deployed
+
+The `deploy.sh` script copies **only these files** to `gh-pages`:
+- `index.html` - Main application
+- `js/` - All JavaScript modules (flattened structure)
+- `styles/main.css` - Stylesheet (moved to root as `main.css`)
+- `favicon.ico` - Site icon
+- `.nojekyll` - Tells GitHub not to process with Jekyll
+
+**Excluded from deployment:**
+- `build.js` - Development server (not needed in production)
+- `deploy.sh` - Deployment script
+- `package.json` - npm configuration
+- `README.md` - Documentation
+- `node_modules/` - Dependencies (if any)
+
+## 📦 Deployment Workflow
+
+### Making Changes and Deploying
+
+**Complete workflow** for updating the live site:
+
+```bash
+# 1. Make your changes to the code
+# Edit any files in js/, styles/, index.html, etc.
+
+# 2. Test locally
+npm run dev
+# Open http://localhost:3000 and verify changes work
+
+# 3. Commit changes to main branch
+git add .
+git commit -m "Description of your changes"
+git push origin main
+
+# 4. Deploy to GitHub Pages
+npm run deploy
+# This creates a new commit on gh-pages and pushes it
+
+# 5. Verify deployment
+# Wait 1-2 minutes, then visit:
+# https://the-soundery.github.io/Granular-Synth-Audio-Development/
+```
+
+### Quick Reference
+
+```bash
+# Development workflow
+npm run dev              # Start local server (http://localhost:3000)
+git add . && git commit  # Commit to main branch
+git push origin main     # Push to GitHub
+
+# Deployment workflow
+npm run deploy           # Deploy to GitHub Pages (updates live site)
+```
+
+### What `npm run deploy` Does
+
+The deployment script performs these steps automatically:
+
+1. ✅ **Safety check** - Warns if you have uncommitted changes
+2. 📦 **Package files** - Copies only production files to temp directory
+3. 🔀 **Switch branches** - Checks out `gh-pages` (creates if needed)
+4. 🗑️ **Clean old deployment** - Removes previous files from `gh-pages`
+5. 📋 **Copy new files** - Moves packaged files to `gh-pages`
+6. 💾 **Commit** - Creates timestamped commit on `gh-pages`
+7. 📤 **Push** - Force-pushes to `origin/gh-pages`
+8. 🔙 **Return** - Switches back to your original branch
+9. 🧹 **Cleanup** - Removes temporary files
+
+**Result:** Live site updates in 1-2 minutes with your latest changes.
+
+## 🔧 Troubleshooting Deployment
+
+### Common Issues
+
+#### "Your site is not published yet"
+**Cause:** GitHub Pages hasn't finished building
+**Solution:** Wait 1-2 minutes and refresh. Check Settings > Pages for status.
+
+#### "404 Not Found" on live site
+**Cause:** GitHub Pages source not configured correctly
+**Solution:**
+1. Go to Settings > Pages
+2. Ensure source is set to `gh-pages` branch
+3. Ensure "root" folder is selected (not `/docs`)
+
+#### Deploy script shows "No changes to commit"
+**Cause:** No files changed since last deployment
+**Solution:** This is normal. The script didn't push anything because there's nothing new.
+
+#### Files missing on live site
+**Cause:** Files not copied by deploy script
+**Solution:** Check `deploy.sh` line 37. Add missing files/folders to the `cp -r` command.
+
+#### Permission denied when pushing
+**Cause:** Git authentication issue
+**Solution:**
+```bash
+# Verify remote is correct
+git remote -v
+
+# Re-authenticate if needed
+git push origin gh-pages  # Follow GitHub prompts
+```
+
+#### Changes deployed but not showing up
+**Cause:** Browser cache
+**Solution:** Hard refresh (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows) or open in private/incognito window.
+
+### Verification Checklist
+
+After deploying, verify:
+
+- [ ] Deployment script completed without errors
+- [ ] GitHub shows recent commit on `gh-pages` branch
+- [ ] Settings > Pages shows "Your site is live at..."
+- [ ] Live URL loads without 404 errors
+- [ ] Audio engine starts correctly
+- [ ] Physics simulation runs smoothly
+- [ ] All UI controls work (tabs, sliders, presets)
+- [ ] Console shows no JavaScript errors
+
+### Rolling Back a Deployment
+
+If you deployed a broken version:
+
+```bash
+# 1. Find the last working commit on gh-pages
+git checkout gh-pages
+git log  # Note the commit hash of the working version
+
+# 2. Reset to that commit
+git reset --hard <commit-hash>
+
+# 3. Force push
+git push origin gh-pages --force
+
+# 4. Return to main
+git checkout main
+```
 
 ## 📊 Performance Features
 
