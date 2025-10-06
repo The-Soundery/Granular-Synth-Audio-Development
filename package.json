@@ -1,0 +1,37 @@
+{
+  "name": "granular-particle-synth",
+  "version": "1.0.0",
+  "description": "Modular granular particle synthesizer with physics simulation",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "dev": "node build.js",
+    "start": "node build.js",
+    "test": "echo \"Testing modular system - open http://localhost:3000 after running 'npm run dev'\"",
+    "lint": "echo \"No linting configured - add ESLint if needed\"",
+    "build": "echo \"Static build - all files are already built and ready to serve\""
+  },
+  "keywords": [
+    "granular-synthesis",
+    "particle-physics",
+    "audio-synthesis",
+    "web-audio-api",
+    "audioworklet",
+    "interactive-music"
+  ],
+  "author": "Granular Particle Synth Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/granular-particle-synth.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/granular-particle-synth/issues"
+  },
+  "homepage": "https://github.com/your-username/granular-particle-synth#readme"
+}
