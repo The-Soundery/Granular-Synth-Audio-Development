@@ -45,7 +45,7 @@ export class PhysicsRenderer {
      * Clear canvas and initialize trail system
      */
     clearCanvas() {
-        this.ctx.fillStyle = 'black';
+        this.ctx.fillStyle = CONFIG.canvas.backgroundColor || 'black';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
@@ -101,7 +101,7 @@ export class PhysicsRenderer {
     render() {
         // Clear canvas
         this.ctx.imageSmoothingEnabled = false;
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 1.0)';
+        this.ctx.fillStyle = CONFIG.canvas.backgroundColor || '#000000';
         this.ctx.fillRect(0, 0, CONFIG.canvas.width, CONFIG.canvas.height);
 
         // Render trail particles first (oldest to newest)

@@ -109,6 +109,15 @@ export function setupSliders() {
         });
     }
 
+    // Canvas background color picker
+    const canvasColor = safeGetElement('canvas-color');
+    if (canvasColor) {
+        sliderEventManager.add(canvasColor, 'change', (e) => {
+            CONFIG.canvas.backgroundColor = e.target.value;
+            console.log(`🎨 Canvas background color changed to ${e.target.value}`);
+        });
+    }
+
     // Stage 2: Granular parameter controls
     const curveParameter = safeGetElement('curveParameter');
     if (curveParameter) {

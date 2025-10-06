@@ -79,8 +79,11 @@ class GranularProcessor extends AudioWorkletProcessor {
         this.voiceStealingCrossfade = 50; // milliseconds (set via message)
         this.lastVoiceAllocationTime = new Map(); // species -> timestamp of last allocation change
         this.pendingVoiceChanges = new Map(); // species -> { newAllocations, changeRequestTime }
-        this.voiceAllocationUpdateInterval = 0.033; // seconds (33ms = ~30fps for responsive visual feedback)
+        this.voiceAllocationUpdateInterval = 0.016; // seconds (16ms = 60fps for smooth visual feedback)
         this.lastVoiceAllocationUpdate = 0;
+
+        // Track previous maxVoices to detect user-initiated changes
+        this.previousMaxVoices = [...this.maxVoicesPerSpecies];
 
         // Audio crossfade system for smooth voice stealing transitions
         // When voice allocations change, particles enter fadeIn (0→100% volume) or fadeOut (100→0% volume)
@@ -155,7 +158,22 @@ class GranularProcessor extends AudioWorkletProcessor {
                             }
                             if (updates.voiceManagement) {
                                 if (updates.voiceManagement.maxVoicesPerSpecies) {
+                                    // Store previous values before updating
+                                    this.previousMaxVoices = [...this.maxVoicesPerSpecies];
                                     this.maxVoicesPerSpecies = updates.voiceManagement.maxVoicesPerSpecies;
+
+                                    // Detect if any maxVoices changed (user slider adjustment)
+                                    const maxVoicesChanged = this.maxVoicesPerSpecies.some((val, idx) =>
+                                        val !== this.previousMaxVoices[idx]
+                                    );
+
+                                    if (maxVoicesChanged) {
+                                        console.log('[maxVoices changed] Clearing pending delays for immediate application');
+                                        // Clear all pending voice changes to apply immediately
+                                        this.pendingVoiceChanges.clear();
+                                        // Force next update to process immediately
+                                        this.lastVoiceAllocationUpdate = 0;
+                                    }
                                 }
                             }
                             if (updates.muteState && updates.muteState.mutedSpecies) {
@@ -534,6 +552,52 @@ class GranularProcessor extends AudioWorkletProcessor {
             if (!currentAllocations || currentAllocations.size === 0) {
                 this.voiceAllocations.set(species, newAllocations);
                 this.lastVoiceAllocationTime.set(species, this.currentTime * 1000);
+                continue;
+            }
+
+            // Special case: maxVoices just changed (user slider adjustment)
+            // Apply immediately with crossfades, skip delay to improve responsiveness
+            const maxVoicesJustChanged = this.maxVoicesPerSpecies[species] !== this.previousMaxVoices[species];
+            if (maxVoicesJustChanged) {
+                console.log(\`[maxVoices changed] Species \${species}: Applying immediately (was \${this.previousMaxVoices[species]}, now \${this.maxVoicesPerSpecies[species]})\`);
+
+                // Apply change with crossfades (same as normal path, but immediate)
+                const crossfadeDuration = this.voiceStealingCrossfade / 1000.0;
+
+                let fadeInCount = 0;
+                for (const particleId of newAllocations) {
+                    if (!currentAllocations.has(particleId)) {
+                        this.particleAudioCrossfade.set(particleId, {
+                            type: 'fadeIn',
+                            startTime: this.currentTime * 1000,
+                            duration: crossfadeDuration * 1000
+                        });
+                        fadeInCount++;
+                    }
+                }
+
+                let fadeOutCount = 0;
+                for (const particleId of currentAllocations) {
+                    if (!newAllocations.has(particleId)) {
+                        this.particleAudioCrossfade.set(particleId, {
+                            type: 'fadeOut',
+                            startTime: this.currentTime * 1000,
+                            duration: crossfadeDuration * 1000
+                        });
+                        fadeOutCount++;
+                    }
+                }
+
+                if (fadeInCount > 0 || fadeOutCount > 0) {
+                    console.log(\`[Crossfade] Created \${fadeInCount} fadeIn + \${fadeOutCount} fadeOut for species \${species} (immediate, duration: \${Math.round(crossfadeDuration * 1000)}ms)\`);
+                }
+
+                this.voiceAllocations.set(species, newAllocations);
+                this.lastVoiceAllocationTime.set(species, this.currentTime * 1000);
+                this.pendingVoiceChanges.delete(species);
+
+                // Update previousMaxVoices for this species
+                this.previousMaxVoices[species] = this.maxVoicesPerSpecies[species];
                 continue;
             }
 

@@ -7,7 +7,8 @@ export const CONFIG = {
     // Canvas settings
     canvas: {
         width: 800,
-        height: 600
+        height: 600,
+        backgroundColor: '#000000' // Canvas background color (default black)
     },
 
     // Species settings

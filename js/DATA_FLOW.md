@@ -525,12 +525,14 @@ UI: preset-system.js: loadPreset()
 
 ---
 
-### 11. Voice Allocation with Audio Crossfading
+### 11. Voice Allocation with Audio Crossfading (Updated 2025-10-06)
 
 ```
 Animation Frame → updateParticles() in AudioWorklet
     │
-    ├─→ updateVoiceAllocations(particles)
+    ├─→ updateVoiceAllocations(particles) [Throttled to 16ms = 60fps, optimized 2025-10-06]
+    │   │
+    │   ├─→ Throttle check: Skip if less than 16ms since last update (60fps sync)
     │   │
     │   ├─→ Group particles by species
     │   │
@@ -549,20 +551,36 @@ Animation Frame → updateParticles() in AudioWorklet
     │   │   │
     │   │   ├─→ Check if allocations changed (compare Sets)
     │   │   │
-    │   │   ├─→ if (allocationsChanged):
-    │   │   │   ├─→ Start delay timer (voiceStealingDelay)
-    │   │   │   └─→ Store pendingVoiceChanges
+    │   │   ├─→ if (!allocationsChanged):
+    │   │   │   └─→ Clear any pending changes, continue
     │   │   │
-    │   │   └─→ if (delay elapsed):
-    │   │       │   // Apply allocation change with crossfade
-    │   │       ├─→ Set up audio crossfades (Timing: milliseconds, Fixed 2025-10-06):
-    │   │       │   ├─→ Newly allocated particles → fadeIn state
-    │   │       │   │   └─→ particleAudioCrossfade.set(id, { type: 'fadeIn', startTime: currentTime*1000, duration: crossfadeDuration*1000 })
-    │   │       │   └─→ De-allocated particles → fadeOut state
-    │   │       │       └─→ particleAudioCrossfade.set(id, { type: 'fadeOut', startTime: currentTime*1000, duration: crossfadeDuration*1000 })
-    │   │       └─→ Apply new voiceAllocations
-    │   │
-    │   └─→ Voice allocation complete (determines audio + visual with crossfade)
+    │   │   ├─→ if (maxVoices >= particleCount):
+    │   │   │   └─→ Apply immediately (no delay needed, all lit)
+    │   │   │
+    │   │   ├─→ if (initialAllocation):
+    │   │   │   └─→ Apply immediately (avoid blank screen)
+    │   │   │
+    │   │   ├─→ if (maxVoicesJustChanged): [NEW 2025-10-06 - Immediate Response]
+    │   │   │   │   // User slider adjustment detected
+    │   │   │   ├─→ Apply change IMMEDIATELY with crossfades (skip delay)
+    │   │   │   ├─→ Set up fadeIn/fadeOut crossfades (50ms default)
+    │   │   │   ├─→ Update previousMaxVoices tracking
+    │   │   │   └─→ Result: ~35ms total latency (16ms throttle + messaging + render)
+    │   │   │
+    │   │   ├─→ else (natural particle reordering):
+    │   │   │   │   // Particles changing velocity order
+    │   │   │   ├─→ Start/update delay timer (voiceStealingDelay = 50ms default)
+    │   │   │   ├─→ Store pendingVoiceChanges
+    │   │   │   └─→ if (delay elapsed):
+    │   │   │       │   // Apply allocation change with crossfade
+    │   │   │       ├─→ Set up audio crossfades (Timing: milliseconds, Fixed 2025-10-06):
+    │   │   │       │   ├─→ Newly allocated particles → fadeIn state
+    │   │   │       │   │   └─→ particleAudioCrossfade.set(id, { type: 'fadeIn', startTime: currentTime*1000, duration: crossfadeDuration*1000 })
+    │   │   │       │   └─→ De-allocated particles → fadeOut state
+    │   │   │       │       └─→ particleAudioCrossfade.set(id, { type: 'fadeOut', startTime: currentTime*1000, duration: crossfadeDuration*1000 })
+    │   │   │       └─→ Apply new voiceAllocations
+    │   │   │
+    │   │   └─→ Voice allocation complete (determines audio + visual with crossfade)
     │
     ├─→ For each particle in particles:
     │   │
@@ -638,10 +656,13 @@ Animation Frame → updateParticles() in AudioWorklet
 **Key Design:**
 
 1. **Voice Allocation Controls Both Audio & Visual:**
-   - Location: [worklet-processor.js:440-575](js/audio/worklet-processor.js#L440-L575)
+   - Location: [worklet-processor.js:487-627](js/audio/worklet-processor.js#L487-L627)
    - Determines which particles can make sound AND which appear bright
    - Velocity-based priority when over limit (fastest particles get voices)
-   - Changes delayed by voiceStealingDelay to prevent flicker
+   - **Smart delay system (2025-10-06)**:
+     - **User slider changes**: Apply immediately (no delay, responsive UX)
+     - **Natural particle reordering**: Delayed by voiceStealingDelay (prevents flicker)
+   - **60fps throttling**: Updates run at 16ms intervals (synced with rendering)
 
 2. **Unified Audio Crossfade System (Smooth Transitions with Auto-Cleanup):**
    - Location: [worklet-processor.js:568-600](js/audio/worklet-processor.js#L568-L600) (setup), [worklet-processor.js:889-927](js/audio/worklet-processor.js#L889-L927) (gain)
@@ -677,7 +698,12 @@ Animation Frame → updateParticles() in AudioWorklet
 - **Motion-Driven**: Bright particles only make sound when moving
 
 **Example Scenario:**
-- Species has 50 particles, maxVoices reduced from 50 → 10
+- Species has 50 particles, user adjusts maxVoices slider from 50 → 10
+- **Immediate response (~35ms total latency):**
+  - Allocation change applied immediately (no 50ms delay)
+  - 40 particles enter fadeOut state
+  - 10 particles enter fadeIn state (fastest moving particles)
+  - Visual feedback updates within 1-2 frames
 - **During 50ms crossfade:**
   - 40 particles fadeOut: Continue spawning grains, volume 100% → 0%
   - 10 particles fadeIn: Start spawning grains, volume 0% → 100%
@@ -687,32 +713,40 @@ Animation Frame → updateParticles() in AudioWorklet
   - Next frame: no voice + no crossfade → timers deleted (cleanup)
   - 10 particles bright and making sound, 40 particles dimmed and silent
 
-**Impact:** Voice changes are smooth and click-free, with automatic resource cleanup preventing timer leaks.
+**Impact:** Slider changes are highly responsive (~35ms vs ~115ms previously), smooth and click-free, with automatic resource cleanup preventing timer leaks.
 
 ### Voice Allocation System Status (Updated 2025-10-06)
 
 **✅ Fully Functional with Unified Audio Crossfading** - Voice allocation controls both visual feedback AND audio output with smooth, spike-free transitions and automatic cleanup.
 
 **Recent Enhancements:**
-1. **Unified Crossfade System** ([worklet-processor.js:568-600](js/audio/worklet-processor.js#L568-L600), [worklet-processor.js:889-927](js/audio/worklet-processor.js#L889-L927))
+1. **Responsive MaxVoices Control (2025-10-06)** ([worklet-processor.js:160-177](js/audio/worklet-processor.js#L160-L177), [worklet-processor.js:558-602](js/audio/worklet-processor.js#L558-L602))
+   - **16ms throttling** (60fps sync, down from 33ms)
+   - **Immediate application** for user slider changes (skips 50ms delay)
+   - **Smart delay system**: Only delays natural particle velocity reordering
+   - **70% latency reduction**: ~115ms → ~35ms for slider changes
+   - **Prevents stuck states**: Rapid slider movement no longer resets timer indefinitely
+   - **Safety preserved**: All crossfades still apply to prevent audio clicks/leaks
+
+2. **Unified Crossfade System** ([worklet-processor.js:564-593](js/audio/worklet-processor.js#L564-L593), [worklet-processor.js:889-927](js/audio/worklet-processor.js#L889-L927))
    - Equal-power fadeIn/fadeOut during voice transitions
    - Eliminates volume spikes and audio clicks
    - Automatic cleanup when fadeOut completes (no timer leaks)
-   - Configurable duration via voiceStealingCrossfade parameter (10-500ms)
+   - Configurable duration via voiceStealingCrossfade parameter (10-500ms, default 50ms)
    - **Timing Fix (2025-10-06)**: All crossfade timing standardized to milliseconds for audio/visual sync
 
-2. **Grain Timer Lifecycle Management** ([worklet-processor.js:310-335](js/audio/worklet-processor.js#L310-L335))
+3. **Grain Timer Lifecycle Management** ([worklet-processor.js:310-335](js/audio/worklet-processor.js#L310-L335))
    - fadeOut particles continue spawning during crossfade
    - When fadeOut completes, crossfade entry deleted automatically
    - Next frame: no voice + no crossfade → timer deleted (prevents leak)
    - Burst protection: time clamping + 4 grain/update limit
 
-3. **Simplified Normalization** ([worklet-processor.js:725-737](js/audio/worklet-processor.js#L725-L737))
+4. **Simplified Normalization** ([worklet-processor.js:725-737](js/audio/worklet-processor.js#L725-L737))
    - Simple √N grain count (removed weighted approach)
    - Crossfade gain applied to individual grains (line 860)
    - Prevents volume dips during transitions
 
-4. **Simplified Grain Rate** ([worklet-processor.js:337-351](js/audio/worklet-processor.js#L337-L351))
+5. **Simplified Grain Rate** ([worklet-processor.js:337-351](js/audio/worklet-processor.js#L337-L351))
    - Removed velocity-to-rate scaling (velocity controls volume only)
    - Removed smoothness boost multiplier (redundant with long grains)
    - Pure overlap-based calculation: grainRate = overlapFactor / grainLength
