@@ -4,6 +4,8 @@ A sophisticated granular particle synthesizer with physics simulation, completel
 
 ## 🚀 Quick Start
 
+### Local Development
+
 ```bash
 # Install dependencies (Node.js 14+ required)
 npm install
@@ -13,6 +15,27 @@ npm run dev
 
 # Open browser to http://localhost:3000
 ```
+
+### GitHub Pages Deployment
+
+Deploy your synthesizer to share with others:
+
+```bash
+# 1. Connect to your GitHub repository (if not already connected)
+git remote add origin https://github.com/The-Soundery/Granular-Synth-Audio-Development.git
+git push -u origin main
+
+# 2. Deploy to GitHub Pages
+npm run deploy
+
+# Your site will be live at:
+# https://the-soundery.github.io/Granular-Synth-Audio-Development/
+```
+
+**Note**: After first deployment, enable GitHub Pages in your repository settings:
+1. Go to Settings > Pages
+2. Source should be set to `gh-pages` branch
+3. Wait 1-2 minutes for deployment to complete
 
 ## 📁 Project Structure
 

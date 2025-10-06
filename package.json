@@ -9,7 +9,8 @@
     "start": "node build.js",
     "test": "echo \"Testing modular system - open http://localhost:3000 after running 'npm run dev'\"",
     "lint": "echo \"No linting configured - add ESLint if needed\"",
-    "build": "echo \"Static build - all files are already built and ready to serve\""
+    "build": "echo \"Static build - all files are already built and ready to serve\"",
+    "deploy": "bash deploy.sh"
   },
   "keywords": [
     "granular-synthesis",
@@ -28,10 +29,10 @@
   "dependencies": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-username/granular-particle-synth.git"
+    "url": "git+https://github.com/The-Soundery/Granular-Synth-Audio-Development.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/granular-particle-synth/issues"
+    "url": "https://github.com/The-Soundery/Granular-Synth-Audio-Development/issues"
   },
-  "homepage": "https://github.com/your-username/granular-particle-synth#readme"
+  "homepage": "https://the-soundery.github.io/Granular-Synth-Audio-Development/"
 }
