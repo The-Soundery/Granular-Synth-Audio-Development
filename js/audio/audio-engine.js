@@ -197,6 +197,13 @@ export async function startAudioEngine() {
                         audioEngine.particleAudioCrossfade.set(particleId, fadeState);
                     }
                 }
+
+                // Emit audio CPU usage event if included
+                if (event.data.cpuUsage !== null && event.data.cpuUsage !== undefined) {
+                    eventBus.emit(Events.AUDIO_PERFORMANCE_UPDATED, {
+                        audioCpuUsage: event.data.cpuUsage
+                    });
+                }
             }
         };
 

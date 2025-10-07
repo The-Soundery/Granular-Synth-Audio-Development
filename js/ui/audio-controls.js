@@ -18,6 +18,11 @@ const sampleControlEventManager = new EventListenerManager('SampleControls');
 // Track current audio species tab
 let currentAudioSpeciesTab = 0;
 
+// Getter for current audio species tab (used by slider-controls.js)
+export function getCurrentAudioSpeciesTab() {
+    return currentAudioSpeciesTab;
+}
+
 export function setupAudioControlEventListeners() {
     // Clear previous listeners
     audioControlEventManager.removeAll();

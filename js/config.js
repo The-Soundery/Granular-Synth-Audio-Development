@@ -81,17 +81,20 @@ export const CONFIG = {
     // Motion-driven granular synthesis parameters
     granular: {
         // Grain length range (seconds)
-        grainLengthMin: 0.02,    // 20ms - short stutter grains
+        // PHASE 2 OPTIMIZATION: Longer grains = smoother with fewer spawns
+        grainLengthMin: 0.05,    // 50ms - longer minimum for better CPU (was 0.03)
         grainLengthMax: 0.5,     // 500ms - long smooth drones
 
         // Overlap factor range (controls grain spawn rate via overlapFactor / grainLength)
-        overlapMin: 0.5,         // minimal overlap, stutter effect
-        overlapMax: 4.0,         // heavy overlap, smooth texture
+        // PHASE 2 OPTIMIZATION: Further reduced for aggressive CPU savings
+        overlapMin: 1.2,         // 1.2x overlap (was 1.0) - just enough for smooth audio
+        overlapMax: 2.5,         // 2.5x overlap (was 3.0) - smooth trails, less CPU
 
         // Motion detection
-        velocityThreshold: 0.01, // minimum velocity for grain spawning
+        // PHASE 3 OPTIMIZATION: Threshold skips nearly-still particles + gain ramping for soft start
+        velocityThreshold: 0.03, // minimum velocity for grain spawning (was 0.01, tried 0.05)
         maxVelocity: 3.0,        // expected maximum velocity
-        maxGrainRate: 200.0,     // Hz, safety cap for grain spawn rate
+        maxGrainRate: 60.0,      // Hz, aggressive cap for grain spawn rate (was 100.0)
 
         // Gain and release
         gainPowerDefault: 1.5,   // default power curve for velocity→gain
@@ -107,6 +110,10 @@ export const CONFIG = {
         freqGamma: 0.6,           // Low-end emphasis (< 1.0 extends low-freq resolution)
         bandwidthOctavesMax: 4.0, // maximum bandwidth in octaves
         bandwidthRefHz: 1000,     // reference bandwidth for amplitude normalization (Hz)
+
+        // PHASE 3 OPTIMIZATION: Pre-filtered frequency bands
+        usePreFilteredBands: true,  // Enable pre-filtered audio bands (eliminates runtime filtering)
+        numFrequencyBands: 10,      // Number of frequency bands to pre-compute (10 = ~200 cent resolution)
 
         // Mixing
         softLimiterThreshold: 0.8, // soft limiting threshold

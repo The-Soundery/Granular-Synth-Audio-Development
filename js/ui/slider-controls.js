@@ -8,7 +8,7 @@ import { createForceMatrix, createSpeciesTabs, createSpeciesControls } from './f
 import { updateAudioParameters } from '../audio/parameter-manager.js';
 import { updateAudioUI } from '../audio/sample-manager.js';
 import { adjustParticleCounts, updateParticleSizes, removeTrailParticlesForSpecies, updateCanvasSize } from '../physics/physics-engine.js';
-import { updateCurveGraph, updateVoiceSliders } from './audio-controls.js';
+import { updateCurveGraph, updateVoiceSliders, getCurrentAudioSpeciesTab, createAudioSampleControls } from './audio-controls.js';
 import { EventListenerManager } from '../shared/event-manager.js';
 import { safeGetElement, updateElementText } from '../shared/dom-utils.js';
 import { clamp, validateInt, validateFloat } from '../shared/validation-utils.js';
@@ -181,6 +181,12 @@ export function setupDraggableNumbers() {
                 adjustParticleCounts();
                 // Update voice sliders since particle count changed
                 updateVoiceSliders();
+
+                // If this species is currently visible in the audio tab, recreate controls
+                // to update the Max Voices slider range immediately
+                if (speciesIndex === getCurrentAudioSpeciesTab()) {
+                    createAudioSampleControls();
+                }
 
             } else if (element.id.includes('size')) {
                 sensitivity = 0.1;
