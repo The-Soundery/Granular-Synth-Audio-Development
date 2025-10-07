@@ -136,28 +136,38 @@ export function render() {
 
 // Animation loop with FPS tracking
 export function animate() {
-    const currentTime = performance.now();
-    const frameTime = currentTime - lastFrameTime;
+    const frameStartTime = performance.now();
+    const timeSinceLastFrame = frameStartTime - lastFrameTime;
 
+    // Measure actual processing time
+    const processStartTime = performance.now();
     updateParticles();
     render();
+    const processEndTime = performance.now();
+    const processingTime = processEndTime - processStartTime;
 
-    // Track frame time for performance metrics
-    frameTimeHistory.push(frameTime);
+    // Track processing time for performance metrics
+    frameTimeHistory.push(processingTime);
     if (frameTimeHistory.length > 60) {
         frameTimeHistory.shift(); // Keep only last 60 frames
     }
 
     // FPS and performance tracking
     frameCount++;
-    if (currentTime - fpsUpdateTime >= 500) { // Update every 500ms
-        const fps = Math.round((frameCount * 1000) / (currentTime - fpsUpdateTime));
-        const avgFrameTime = frameTimeHistory.reduce((a, b) => a + b, 0) / frameTimeHistory.length;
+    if (frameStartTime - fpsUpdateTime >= 500) { // Update every 500ms
+        const fps = Math.round((frameCount * 1000) / (frameStartTime - fpsUpdateTime));
+        const avgProcessingTime = frameTimeHistory.reduce((a, b) => a + b, 0) / frameTimeHistory.length;
+
+        // Calculate main thread CPU usage
+        // Target frame time at 60fps = 16.67ms
+        const targetFrameTime = 1000 / 60;
+        const mainCpuUsage = (avgProcessingTime / targetFrameTime) * 100;
 
         // Emit performance metrics event instead of directly updating DOM
         eventBus.emit(Events.PERFORMANCE_UPDATED, {
             fps: fps,
-            frameTime: avgFrameTime,
+            frameTime: avgProcessingTime,
+            mainCpuUsage: mainCpuUsage,
             canvasSize: `${CONFIG.canvas.width}×${CONFIG.canvas.height}`,
             totalParticles: state.particles.length,
             trailParticles: state.trailParticles.length,
@@ -166,10 +176,10 @@ export function animate() {
         });
 
         frameCount = 0;
-        fpsUpdateTime = currentTime;
+        fpsUpdateTime = frameStartTime;
     }
 
-    lastFrameTime = currentTime;
+    lastFrameTime = frameStartTime;
     requestAnimationFrame(animate);
 }
 

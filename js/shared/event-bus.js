@@ -257,6 +257,7 @@ export const Events = {
     // Audio events
     AUDIO_INITIALIZED: 'audio:initialized',
     AUDIO_SHUTDOWN: 'audio:shutdown',
+    AUDIO_PERFORMANCE_UPDATED: 'audio:performance-updated',
     SAMPLE_LOADED: 'sample:loaded',
 
     // UI events

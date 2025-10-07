@@ -7,6 +7,7 @@ import { CONFIG, audioEngine } from '../config.js';
 import { AudioSystem } from './audio-system.js';
 import { Utils } from '../utils.js';
 import { createAudioSampleControls as createAudioSampleControlsUI, updateWaveformDisplay as updateWaveformUI } from '../ui/audio-controls.js';
+import { FrequencyBandProcessor } from './frequency-band-processor.js';
 
 export async function loadAudioSample(speciesIndex, file) {
     try {
@@ -60,23 +61,41 @@ export async function loadAudioSample(speciesIndex, file) {
         // Store the buffer
         CONFIG.species.audioBuffers[speciesIndex] = audioBuffer;
 
+        // PHASE 3 OPTIMIZATION: Pre-filter audio into frequency bands
+        let frequencyBands;
+        if (CONFIG.granular.usePreFilteredBands) {
+            const bandProcessor = new FrequencyBandProcessor(audioEngine.context);
+            const bandBuffers = await bandProcessor.processSampleIntoBands(audioBuffer);
+            frequencyBands = bandProcessor.convertBandsToWorkletFormat(bandBuffers);
+        }
+
         // Send to worklet
         if (audioEngine.workletNode) {
             try {
-                // Transfer the audio buffer data to the worklet
-                const channelData = Array.from(
-                    { length: audioBuffer.numberOfChannels },
-                    (_, i) => audioBuffer.getChannelData(i)
-                );
+                if (CONFIG.granular.usePreFilteredBands && frequencyBands) {
+                    // Send pre-filtered frequency bands
+                    audioEngine.workletNode.port.postMessage({
+                        type: 'audioBufferBands',
+                        species: speciesIndex,
+                        numBands: frequencyBands.length,
+                        bands: frequencyBands
+                    });
+                } else {
+                    // Send original buffer (legacy path)
+                    const channelData = Array.from(
+                        { length: audioBuffer.numberOfChannels },
+                        (_, i) => audioBuffer.getChannelData(i)
+                    );
 
-                audioEngine.workletNode.port.postMessage({
-                    type: 'audioBuffer',
-                    species: speciesIndex,
-                    sampleRate: audioBuffer.sampleRate,
-                    length: audioBuffer.length,
-                    numberOfChannels: audioBuffer.numberOfChannels,
-                    channelData: channelData
-                });
+                    audioEngine.workletNode.port.postMessage({
+                        type: 'audioBuffer',
+                        species: speciesIndex,
+                        sampleRate: audioBuffer.sampleRate,
+                        length: audioBuffer.length,
+                        numberOfChannels: audioBuffer.numberOfChannels,
+                        channelData: channelData
+                    });
+                }
             } catch (workletError) {
                 throw new Error(`Failed to send audio data to worklet: ${workletError.message}`);
             }

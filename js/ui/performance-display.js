@@ -19,6 +19,11 @@ export function initPerformanceDisplay() {
         updatePerformanceMetrics(metrics);
     });
 
+    // Listen for audio performance updates
+    eventBus.on(Events.AUDIO_PERFORMANCE_UPDATED, (metrics) => {
+        updateAudioPerformanceMetrics(metrics);
+    });
+
     // Listen for canvas resize events
     eventBus.on(Events.CANVAS_RESIZED, ({ width, height }) => {
         updateElementText('canvas-size', `${width}×${height}`);
@@ -42,4 +47,44 @@ function updatePerformanceMetrics(metrics) {
     updateElementText('trail-particles', metrics.trailParticles);
     updateElementText('audio-particles', metrics.audioParticles);
     updateElementText('grid-info', metrics.gridInfo);
+
+    // Update main CPU with color coding
+    if (metrics.mainCpuUsage !== undefined) {
+        updateCpuDisplay('main-cpu', metrics.mainCpuUsage);
+    }
+}
+
+/**
+ * Update audio performance metric displays
+ * @param {Object} metrics - Audio performance metrics data
+ * @private
+ */
+function updateAudioPerformanceMetrics(metrics) {
+    // Update audio CPU with color coding
+    if (metrics.audioCpuUsage !== undefined) {
+        updateCpuDisplay('audio-cpu', metrics.audioCpuUsage);
+    }
+}
+
+/**
+ * Update CPU display with color coding
+ * @param {string} elementId - ID of the element to update
+ * @param {number} cpuUsage - CPU usage percentage
+ * @private
+ */
+function updateCpuDisplay(elementId, cpuUsage) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const formattedValue = `${cpuUsage.toFixed(1)}%`;
+    element.textContent = formattedValue;
+
+    // Color coding based on CPU usage
+    if (cpuUsage < 60) {
+        element.style.color = '#4ade80'; // Green - good
+    } else if (cpuUsage < 80) {
+        element.style.color = '#fbbf24'; // Yellow - warning
+    } else {
+        element.style.color = '#f87171'; // Red - critical
+    }
 }
