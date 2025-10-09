@@ -55,14 +55,26 @@ class GranularProcessor extends AudioWorkletProcessor {
             freqGamma: 0.6,
             bandwidthOctavesMax: 4.0,
             bandwidthRefHz: 1000,
-            softLimiterThreshold: 0.8,
+            softLimiterThreshold: 0.98,
             softLimiterGain: 1.25
         };
 
         // Audio state
         this.currentTime = 0;
-        this.volumeLevel = 0;
-        this.volumeDecay = 0.95;
+
+        // Volume metering - improved for accurate clipping detection
+        this.peakLevel = 0;          // Peak sample value
+        this.rmsLevel = 0;            // RMS (average power) level
+        this.peakDecay = 0.98;        // Slower decay for smoother peak reading
+        this.rmsDecay = 0.95;         // Decay for RMS
+        this.rmsWindowSize = 128;     // Sample window for RMS calculation
+        this.rmsBuffer = new Float32Array(this.rmsWindowSize);
+        this.rmsBufferIndex = 0;
+
+        // Clipping detection thresholds
+        this.clipWarningThreshold = 0.8;   // Orange warning at 80%
+        this.clipDangerThreshold = 0.95;    // Red danger at 95%
+        this.clippingDetected = false;
 
         // Performance optimization buffers
         this.mixedGrainBuffer = new Float32Array(128);
@@ -196,10 +208,8 @@ class GranularProcessor extends AudioWorkletProcessor {
                                     );
 
                                     if (maxVoicesChanged) {
-                                        console.log('[maxVoices changed] Clearing pending delays for immediate application');
-                                        // Clear all pending voice changes to apply immediately
-                                        this.pendingVoiceChanges.clear();
-                                        // Force next update to process immediately
+                                        console.log('[maxVoices changed] Forcing immediate voice allocation update');
+                                        // Force next update to process immediately by resetting timer
                                         this.lastVoiceAllocationUpdate = 0;
                                     }
                                 }
@@ -456,14 +466,8 @@ class GranularProcessor extends AudioWorkletProcessor {
             }
         }
 
-        // Send debug info
-        this.port.postMessage({
-            type: 'particleCount',
-            count: this.activeGrains.length,
-            volumeLevel: this.volumeLevel
-        });
-
         // Voice activity is now updated in process() method for continuous tracking
+        // Note: Volume metering moved to voiceState message for unified updates
     }
 
     // Spawn a new grain for motion-driven synthesis
@@ -609,8 +613,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             return; // Skip update, not enough time has passed
         }
         this.lastVoiceAllocationUpdate = this.currentTime;
-
-        console.log('[updateVoiceAllocations] Called with', particles.length, 'particles');
 
         // Calculate alpha from user's voiceStealingDelay slider
         // Formula: alpha = updateInterval / (targetDelay + updateInterval)
@@ -812,7 +814,11 @@ class GranularProcessor extends AudioWorkletProcessor {
             type: 'voiceState',
             allocations: allocations,
             crossfades: crossfades,
-            cpuUsage: cpuUsage // null if not time to report yet
+            cpuUsage: cpuUsage, // null if not time to report yet
+            // Volume metering with clipping detection
+            peakLevel: this.peakLevel,
+            rmsLevel: this.rmsLevel,
+            clipping: this.clippingDetected
         });
     }
 
@@ -886,21 +892,41 @@ class GranularProcessor extends AudioWorkletProcessor {
             }
         }
 
-        // Apply √N normalization to prevent clipping
-        // Simple grain count - crossfade gain already applied to individual grains (line 860)
-        // No need for weighted normalization as fadeIn grains naturally have reduced contribution
-        const grainCount = this.activeGrains.length;
+        // √N normalization removed - soft limiter provides adaptive protection instead
 
-        if (grainCount > 1) {
-            const normFactor = 1.0 / Math.sqrt(grainCount);
-            for (let i = 0; i < bufferLength; i++) {
-                for (let channel = 0; channel < outputChannels; channel++) {
-                    output[channel][i] *= normFactor;
-                }
+        // Calculate volume level BEFORE soft limiter for accurate clipping detection
+        let maxSample = 0;
+        let sumSquares = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            for (let channel = 0; channel < outputChannels; channel++) {
+                const sample = Math.abs(output[channel][i]);
+                maxSample = Math.max(maxSample, sample);
+                sumSquares += sample * sample;
             }
         }
 
-        // Apply soft limiting
+        // Update peak level with decay (slower for smoother visual feedback)
+        this.peakLevel = Math.max(maxSample, this.peakLevel * this.peakDecay);
+
+        // Calculate RMS (Root Mean Square) - average power level
+        const currentRMS = Math.sqrt(sumSquares / (bufferLength * outputChannels));
+
+        // Store RMS sample in circular buffer
+        this.rmsBuffer[this.rmsBufferIndex] = currentRMS;
+        this.rmsBufferIndex = (this.rmsBufferIndex + 1) % this.rmsWindowSize;
+
+        // Calculate smoothed RMS from buffer
+        let rmsSum = 0;
+        for (let i = 0; i < this.rmsWindowSize; i++) {
+            rmsSum += this.rmsBuffer[i];
+        }
+        this.rmsLevel = rmsSum / this.rmsWindowSize;
+
+        // Detect clipping (using peak level for accurate detection)
+        const wasClipping = this.clippingDetected;
+        this.clippingDetected = this.peakLevel >= this.clipDangerThreshold;
+
+        // Apply soft limiting (after metering to preserve true peak detection)
         const threshold = this.granularConfig.softLimiterThreshold;
         const gain = this.granularConfig.softLimiterGain;
         for (let i = 0; i < bufferLength; i++) {
@@ -912,17 +938,6 @@ class GranularProcessor extends AudioWorkletProcessor {
                 }
             }
         }
-
-        // Calculate volume level for visualization
-        let maxSample = 0;
-        for (let i = 0; i < bufferLength; i++) {
-            for (let channel = 0; channel < outputChannels; channel++) {
-                maxSample = Math.max(maxSample, Math.abs(output[channel][i]));
-            }
-        }
-
-        // Update volume level with decay
-        this.volumeLevel = Math.max(maxSample, this.volumeLevel * this.volumeDecay);
 
         this.currentTime += bufferLength / sampleRate;
 

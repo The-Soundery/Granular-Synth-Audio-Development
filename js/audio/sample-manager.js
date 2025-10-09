@@ -132,6 +132,7 @@ export async function loadAudioSample(speciesIndex, file) {
         }
 
         Utils.showToast(userMessage, 4000);
+        throw error; // Re-throw to propagate error to caller
     }
 }
 
@@ -277,29 +278,7 @@ export function updateCurveGraph() {
     ctx.fillText(`x^${power.toFixed(1)}`, width - 40, 15);
 }
 
-export function updateVolumeMeter(volumeLevel) {
-    const meter = document.getElementById('volumeMeter');
-    const text = document.getElementById('volumeText');
-
-    if (!meter || !text) return;
-
-    // Apply logarithmic scaling for better visual representation
-    // Map 0.001 to 1% and 1.0 to 100% with logarithmic curve
-    let scaledLevel = 0;
-    if (volumeLevel > 0.001) {
-        // Logarithmic scale: log10(volumeLevel / 0.001) / log10(1000)
-        scaledLevel = Math.log10(volumeLevel / 0.001) / Math.log10(1000);
-        scaledLevel = Math.max(0, Math.min(1, scaledLevel));
-    }
-
-    const percentage = scaledLevel * 100;
-
-    // Update meter width
-    meter.style.width = percentage + '%';
-
-    // Update text
-    text.textContent = Math.round(percentage) + '%';
-}
+// Note: updateVolumeMeter has been moved to audio-controls.js to avoid duplication
 
 // Note: updateWaveformDisplay and createAudioSampleControls have been moved to
 // js/ui/audio-controls.js to follow the module separation principle.

@@ -19,7 +19,9 @@ export function validateAudioParameter(type, value) {
         case 'curveParameter':
             return validateFloat(value, 0.1, 4.0);
         case 'volume':
-            return validateFloat(value, 0.1, 2.0);
+            // Volume is now stored as linear (converted from dB in UI)
+            // Allow full range from silence (0) to +12dB (3.98)
+            return validateFloat(value, 0, 4.0);
         case 'pitch':
             return validateInt(value, -24, 24);
         case 'voices':
@@ -168,7 +170,9 @@ export function sendParticleDataToAudio() {
         // Get UI parameters for motion-driven synthesis
         const volumeScaleEl = safeGetElement('volumeScale');
         const curveParameterEl = safeGetElement('curveParameter');
-        const volumeScale = parseFloat(volumeScaleEl?.value || 1.0);
+        // Convert volumeScale from dB to linear: linear = 10^(dB/20)
+        const volumeScaleDB = parseFloat(volumeScaleEl?.value || 0);
+        const volumeScale = Math.pow(10, volumeScaleDB / 20);
         const curveParameter = parseFloat(curveParameterEl?.value || CONFIG.granular.gainPowerDefault);
 
         // Cache constants for performance

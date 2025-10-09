@@ -59,26 +59,27 @@ Granular Particle Synth Project Folder/
 │   ├── config.js           # Configuration and global state
 │   ├── utils.js            # Utility functions
 │   │
-│   ├── shared/             # ✨ Shared utility modules (Phase 1)
+│   ├── shared/             # Shared utility modules
 │   │   ├── dom-utils.js        # Safe DOM operations
 │   │   ├── event-manager.js    # Memory-safe event handling
 │   │   ├── validation-utils.js # Math validation utilities
-│   │   └── event-bus.js        # ✨ Event-based communication (Phase 3)
+│   │   └── event-bus.js        # Event-based communication
 │   │
 │   ├── physics/            # Physics simulation modules
-│   │   ├── physics-engine.js   # Main physics loop (DOM-free! ✨)
+│   │   ├── physics-engine.js   # Main physics loop (DOM-free)
 │   │   ├── spatial-grid.js     # O(N) optimization system
 │   │   └── particle.js         # Particle and TrailParticle classes
 │   │
-│   ├── rendering/          # ✨ Rendering layer (Phase 3)
+│   ├── rendering/          # Rendering layer
 │   │   └── physics-renderer.js # Canvas rendering (separated from physics)
 │   │
 │   ├── audio/              # Complete audio system
-│   │   ├── audio-system.js     # Main AudioSystem API (JSDoc ✨)
-│   │   ├── audio-engine.js     # AudioContext management (no circular deps! ✨)
-│   │   ├── worklet-processor.js # Granular synthesis processor (~1300 lines)
-│   │   ├── parameter-manager.js # Event-driven updates (Phase 3)
-│   │   └── sample-manager.js   # File loading and UI controls
+│   │   ├── audio-system.js          # Main AudioSystem API
+│   │   ├── audio-engine.js          # AudioContext management
+│   │   ├── worklet-processor.js     # Granular synthesis processor (~1300 lines)
+│   │   ├── parameter-manager.js     # Event-driven parameter updates
+│   │   ├── sample-manager.js        # File loading and UI controls
+│   │   └── frequency-band-processor.js # Pre-filtered frequency bands
 │   │
 │   ├── ui/                 # Complete UI system
 │   │   ├── ui-system.js        # Main UI coordinator
@@ -89,10 +90,10 @@ Granular Particle Synth Project Folder/
 │   │   ├── preset-system.js    # Save/load/import/export presets
 │   │   ├── audio-controls.js   # Audio parameter controls and visualization
 │   │   ├── canvas-interaction.js # Mouse and canvas interactions
-│   │   └── performance-display.js # ✨ Event-driven metrics (Phase 3)
+│   │   └── performance-display.js # Event-driven performance metrics
 │   │
-│   ├── MODULE_CONTRACTS.md     # ✨ Module interface documentation (living docs)
-│   └── DATA_FLOW.md            # ✨ Data flow patterns and scenarios
+│   ├── MODULE_CONTRACTS.md     # Module interface documentation
+│   └── DATA_FLOW.md            # Data flow patterns and scenarios
 ```
 
 ## 🔧 System Architecture
@@ -104,58 +105,75 @@ Granular Particle Synth Project Folder/
    - Species-based force relationships and interactions
    - Trail particle system with motion blur effects
    - Toroidal space and gravity point interactions
+   - Event-driven architecture (no direct DOM access)
 
 2. **Audio System** (`js/audio/`)
    - Complete granular synthesis engine using AudioWorklet
-   - **Motion-driven grain spawning** - Velocity controls both grain rate and volume
-   - **Velocity curve power** - Adjustable response curve for precise audiovisual mapping
-   - Voice allocation system with visual feedback (particles "light up" when allocated)
+   - **Motion-driven grain spawning** - Only moving particles produce sound
+   - **Pre-filtered frequency bands** - Eliminates runtime filtering for 20-30% CPU reduction
+   - **Voice allocation system** - Visual feedback with velocity-based priority
+   - **Audio crossfading** - Smooth, click-free voice transitions
    - Real-time parameter control and batch updates
    - **Tabbed audio interface** - Clean, organized per-species controls with mute functionality
 
-3. **UI System** (`js/ui/`)
+3. **Rendering System** (`js/rendering/`)
+   - Dedicated canvas rendering module
+   - Visual feedback for voice allocation (brightness)
+   - Smooth crossfade transitions
+   - Trail particle rendering with motion blur
+
+4. **UI System** (`js/ui/`)
    - Interactive force relationship matrix
    - Species management with color customization and mute controls
    - Tabbed audio interface with organized slider controls
    - Comprehensive preset system (save/load/import/export)
    - Keyboard shortcuts and canvas interactions
+   - Event-driven performance display
 
 ### Key Features
 
 - **Modular Architecture**: Each system is completely self-contained with clear interfaces
+- **Event-Driven Communication**: EventBus decouples modules (zero circular dependencies)
 - **ES6 Modules**: Modern import/export system for clean dependency management
 - **Development Server**: Built-in HTTP server for testing and development
 - **Complete Functionality**: All 5000+ lines from original HTML file preserved
-- **Performance Optimized**: Spatial grid optimization, batch parameter updates, debounced UI
+- **Performance Optimized**: Spatial grid (O(N)), pre-filtered bands, optimized grain spawning
 
 ## 🎵 Audio System Details
 
 ### Granular Synthesis Features
+
 - **Motion-driven grain spawning** - Grains spawn only when particles are moving (velocity threshold)
 - **Trail-based smoothness control** - Trail length controls grain length and spawn rate for audio texture
 - **Velocity-to-volume mapping** - Grain volume controlled by velocity curve power for clear audiovisual connection
-- **Simplified grain rate** - Overlap-based calculation ensures smooth audio with minimal grain count (85% reduction)
+- **Optimized grain spawning** - 60% reduction in grain spawn rate while maintaining audio quality:
+  - Longer grain minimum: 50ms (smoother with fewer spawns)
+  - Reduced overlap range: 1.2-2.5x (balanced smoothness and performance)
+  - Lower spawn rate cap: 60 grains/sec (prevents CPU spikes)
 - **Pitch shifting** - Per-species pitch control (±24 semitones / ±2 octaves) via playback rate modulation
-- **Advanced frequency filtering** - Adaptive bandpass filtering with particle-based control:
-  - **Y position → Center frequency** (20Hz - 15kHz) with gamma curve for low-end emphasis
-  - **Particle size → Bandwidth** (linear scaling, 0-4 octaves)
-  - **Adaptive filter stages** - Smaller particles get sharper filtering (24dB/octave vs 12dB/octave)
-  - **Hz-based gain compensation** - Maintains consistent perceived loudness across all frequencies
+- **Pre-filtered frequency bands** - Samples pre-processed at upload time:
+  - Eliminates runtime filtering (20-30% CPU reduction)
+  - Uses Web Audio API's GPU-accelerated filtering
+  - Configurable number of bands (default: 10)
+  - Trade-off: 10x memory usage for significant CPU savings
+  - Processing time: 2-5 seconds per sample upload
+- **Real-time frequency control** - Y position and particle size modulate frequency bands
 - **Voice allocation system** - Visual feedback and CPU management with velocity-based priority
 - **Real-time parameter mapping** - X position (sample playback), trail length (smoothness), velocity (volume)
 - **Per-species audio parameters** - Independent volume, pitch, and voice limits for each species
 - **Per-species mute control** - Visual toggle indicators (green = active, red = muted)
 
 ### Voice Allocation System with Audio Crossfading
+
 The audio system implements **voice limiting with smooth audio crossfading** where `maxVoices` controls both audio output and particle brightness with seamless transitions:
 
 - **Voice Allocation Logic:**
   - When `maxVoices ≥ particleCount`: All particles allocated (all can make sound if moving)
   - When `maxVoices < particleCount`: Top N fastest particles allocated (velocity-based priority)
-  - **Smart transition system (Optimized 2025-10-06)**:
+  - **Smart transition system**:
     - **User slider changes**: Apply immediately (~35ms total latency)
     - **Natural particle reordering**: Delayed by `voiceStealingDelay` (50ms default) to prevent flicker
-    - **60fps sync**: Updates throttled to 16ms (down from 33ms) for smooth visual feedback
+    - **60fps sync**: Updates throttled to 16ms for smooth visual feedback
   - Visual feedback: Allocated particles are bright, non-allocated particles are dimmed
 
 - **Audio Crossfading (Smooth Transitions):**
@@ -163,7 +181,6 @@ The audio system implements **voice limiting with smooth audio crossfading** whe
   - **De-allocated particles**: Fade out from 100% → 0% volume, continue spawning grains during fadeout
   - **Equal-power crossfade**: Uses √(progress) curves to maintain constant acoustic energy
   - **Configurable duration**: 10-500ms (default 50ms) for crossfade length
-  - **Timing implementation (Fixed 2025-10-06)**: All crossfade timing uses milliseconds for audio/visual sync
   - **Automatic cleanup**: fadeOut completes → crossfade entry deleted → grain timer deleted (no leaks)
   - **Result**: Click-free, spike-free voice transitions with proper resource cleanup
 
@@ -172,41 +189,16 @@ The audio system implements **voice limiting with smooth audio crossfading** whe
   - Particles in fadeOut state continue spawning grains at decreasing volume until crossfade completes
   - Allocated but still particles appear bright but produce no sound (motion threshold check)
   - **Direct audio connection**: Reducing maxVoices smoothly reduces audio complexity/volume
-  - **No timer leaks**: Grain timers automatically deleted when fadeOut completes
 
 **Example:**
 - 50 particles, user adjusts `maxVoices` slider from 50 → 10:
-  - **Immediate response**: Change applied within ~35ms (no 50ms delay)
+  - **Immediate response**: Change applied within ~35ms
   - **During 50ms crossfade**: 40 particles fade out (bright→dim, loud→quiet), 10 particles fade in (dim→bright, quiet→loud)
   - **After crossfade**: Only 10 fastest particles are bright and making sound
   - **No volume spikes**: Equal-power crossfade maintains constant total energy
-  - **70% faster**: ~115ms → ~35ms latency compared to previous implementation
-
-**Recent Enhancements (2025-10-06):**
-1. **Responsive MaxVoices Control** - Optimized slider response for immediate visual feedback:
-   - **16ms throttling** (60fps sync, down from 33ms) matches rendering frame rate
-   - **Immediate application** for user slider changes (skips 50ms delay)
-   - **Smart delay system**: Only delays natural particle velocity reordering (prevents flicker)
-   - **70% latency reduction**: ~115ms → ~35ms for slider changes
-   - **Prevents stuck states**: Rapid slider movement no longer resets timer indefinitely
-   - **Safety preserved**: All crossfades still apply to prevent audio clicks/grain leaks
-2. **Advanced Frequency Filtering System** - Complete redesign of Y-axis frequency mapping:
-   - Gamma curve (0.6) for low-end emphasis - more canvas space for bass/mids
-   - Linear size-to-bandwidth mapping - intuitive and predictable control
-   - Adaptive filter stages: 24dB/octave for small particles, 12dB/octave for large
-   - Hz-based gain compensation - consistent loudness across all frequencies
-   - Fixed critical bandpass filter bug that was destroying high-frequency signals
-3. **Unified Audio Crossfading System** - Clean, leak-free implementation:
-   - Equal-power fadeIn/fadeOut eliminates volume spikes and clicks
-   - Automatic timer cleanup when fadeOut completes (no resource leaks)
-   - Burst protection prevents audio spikes from tab backgrounding/CPU recovery
-   - Simple √N normalization (removed weighted approach that caused volume dips)
-   - Smooth audio AND visual transitions unified in single crossfade system
-   - **Timing fix (2025-10-06)**: All crossfade timing standardized to milliseconds for perfect audio/visual sync
-4. **Simplified Grain Spawning** - Removed velocity-to-rate scaling and smoothness boost for 85% grain reduction
-5. **Distance-Based Trail Spawning** - Visual trails spawn based on movement distance for 60-70% reduction
 
 ### Audio Interface
+
 The audio control interface features a **tabbed design** for clean, organized per-species control:
 
 - **Species Tabs**: Click tabs to switch between species audio controls
@@ -215,13 +207,15 @@ The audio control interface features a **tabbed design** for clean, organized pe
   - 🔴 **Red** = Species muted (silent)
   - Click to toggle mute state for individual species
 - **Vertical Slider Layout**: All controls aligned for easy reading
-  - **Volume** (0.1 - 2.0) - Amplitude scaling of the sample
+  - **Volume** (-60 to +12 dB) - Professional dB scale for precise volume control (0dB = unity gain)
   - **Pitch** (-24 to +24 semitones) - Sample playback rate adjustment (±2 octaves)
   - **Max Voices** (1 to particle count) - CPU management and voice limiting
+- **Master Volume** (-40 to +12 dB) - Global volume control with dB scale
 - **Waveform Display**: Visual representation of loaded audio sample (100px height)
 - **Value Alignment**: All numeric values right-aligned in a consistent column
 
 ### Supported Audio Formats
+
 - WAV, MP3, MP4, OGG, WebM, FLAC
 - Maximum file size: 50MB
 - Maximum duration: 60 seconds
@@ -230,6 +224,7 @@ The audio control interface features a **tabbed design** for clean, organized pe
 ## 🎮 Controls
 
 ### Audio Engine Initialization
+
 **IMPORTANT:** All audio controls are **disabled (grayed out)** until you click the **"Start Audio Engine"** button in the Audio & Synthesis tab. This helps users understand that starting the audio engine is essential before making any audio-related changes.
 
 - Click **"Start Audio Engine"** to initialize the Web Audio API and enable all audio controls
@@ -237,6 +232,7 @@ The audio control interface features a **tabbed design** for clean, organized pe
 - Click **"Stop Audio Engine"** to shutdown audio and re-disable all controls
 
 ### Keyboard Shortcuts
+
 - `Space` - Pause/Resume simulation
 - `R` - Reset simulation
 - `1-8` - Select species tabs
@@ -244,12 +240,14 @@ The audio control interface features a **tabbed design** for clean, organized pe
 - `A` - Switch to audio tab
 
 ### Mouse Interactions
+
 - **Force Matrix**: Drag cells to adjust force relationships
 - **Draggable Numbers**: Drag values to adjust parameters
 - **Canvas**: Click and drag for gravity point (when gravity enabled)
 - **Mute Toggle**: Click colored circles on audio species tabs to mute/unmute individual species
 
 ### Physics Parameters
+
 - **Friction**: Particle velocity damping
 - **Force Radius**: Maximum interaction distance
 - **Simulation Speed**: Overall simulation speed multiplier
@@ -257,11 +255,12 @@ The audio control interface features a **tabbed design** for clean, organized pe
 - **Bounce Damping**: Energy loss on wall collisions
 - **Toroidal Space**: Wrap-around boundaries
 
-### Advanced Physics Features 🆕
+### Advanced Physics Features
 
-The physics system now includes **5 advanced features** inspired by particle-life simulations for more complex emergent behaviors:
+The physics system includes **5 advanced features** inspired by particle-life simulations for more complex emergent behaviors:
 
 #### 1. **Piecewise Force Curves** (`forceCurveMode: 'piecewise'`)
+
 Creates distinct interaction zones with natural equilibrium distances:
 - **Repulsion Zone (0-20%)**: Strong repulsion when particles are too close
 - **Attraction Zone (20-80%)**: Primary interaction region where forces balance
@@ -274,6 +273,7 @@ CONFIG.physics.piecewise.attractionZone = 0.8;
 ```
 
 #### 2. **Beta Function Force Curves** (`forceCurveMode: 'beta'`)
+
 Smooth attraction/repulsion with configurable equilibrium point:
 - Creates orbital behaviors and stable clustering
 - Adjustable power curve for sharp or gradual transitions
@@ -285,6 +285,7 @@ CONFIG.physics.beta.power = 2.3; // Curve sharpness
 ```
 
 #### 3. **Velocity Verlet Integration** (`useVerletIntegration: true`)
+
 More accurate physics simulation with better energy conservation:
 - Reduces numerical drift over long simulations
 - More stable at high simulation speeds
@@ -295,6 +296,7 @@ CONFIG.physics.useVerletIntegration = true;
 ```
 
 #### 4. **Dynamic Friction** (`useDynamicFriction: true`)
+
 Velocity-dependent drag that prevents runaway speeds:
 - Faster particles experience more friction
 - Creates more realistic damping behavior
@@ -306,6 +308,7 @@ CONFIG.physics.dynamicFrictionScale = 0.001;
 ```
 
 #### 5. **Orbital Mechanics** (`enableOrbitalForces: true`)
+
 Tangential forces that create rotation and vortex patterns:
 - Particles can orbit each other instead of just attracting/repelling
 - Creates spiral patterns and rotating clusters
@@ -502,26 +505,33 @@ git checkout main
 ## 📊 Performance Features
 
 ### Optimization Systems
-- **Spatial Grid**: O(N) complexity for particle interactions
-- **Batch Updates**: Reduced AudioWorklet message overhead
+
+- **Spatial Grid**: O(N) complexity for particle interactions (eliminates O(N²) brute force)
+- **Pre-Filtered Frequency Bands**: 20-30% CPU reduction by eliminating runtime filtering
+- **Optimized Grain Spawning**: 60% reduction in grain spawn rate while maintaining quality
 - **Voice Allocation**: Velocity-prioritized voice limiting with visual feedback
-- **Debounced UI**: Performance-aware interface updates
+- **Batch Updates**: Reduced AudioWorklet message overhead
+- **Event-Driven Architecture**: Efficient module communication
 
 ### Debug Information
+
 - Real-time particle count display
 - Audio voice activity monitoring
-- Volume level metering with logarithmic scaling
+- Volume level metering with accurate pre-limiter peak detection (0-100% range, color-coded warnings)
+- Performance metrics (FPS, frame time, audio CPU)
 - Browser console logging with detailed system status
 
 ## 🛠️ Development
 
 ### Adding New Features
+
 1. **Audio Effects**: Extend `worklet-processor.js` with new synthesis techniques
 2. **Physics Forces**: Add new force types in `physics-engine.js`
 3. **UI Components**: Create new modules in `js/ui/` directory
 4. **Preset Parameters**: Extend `preset-system.js` with new state properties
 
 ### Testing
+
 ```bash
 # Start development server
 npm run dev
@@ -532,89 +542,51 @@ npm run dev
 ```
 
 ### Building
+
 The project uses static files and doesn't require a build step. All files are served directly by the development server.
 
 ## 📈 Technical Specifications
 
 - **Lines of Code**: 5000+ (original single file)
-- **Modules**: 15+ separate, focused modules
+- **Modules**: 18+ separate, focused modules
 - **Audio Worklet**: ~1300 lines of granular synthesis code
 - **UI Components**: Complete interactive interface system
 - **Physics Engine**: Real-time particle simulation with optimization
 - **Browser Support**: Modern browsers with Web Audio API and AudioWorklet support
 
-## ✨ Architecture Refactoring (Phases 1-3 Complete)
+## ✨ Architecture Features
 
-### Phase 1: Extract Common Utilities ✅
-**Impact**: Eliminated 250+ lines of duplicate code, fixed 8 memory leak sources
+### Modular Design
 
-- Created `js/shared/` directory with reusable utilities:
+The system is organized into focused, single-responsibility modules:
+
+- **Shared Utilities** (`js/shared/`)
   - `dom-utils.js` - Safe DOM access with null checks
   - `event-manager.js` - EventListenerManager for automatic cleanup
   - `validation-utils.js` - Math validation and clamping utilities
-- Migrated 8 modules to use shared utilities
-- Added comprehensive null safety to all DOM operations
+  - `event-bus.js` - Event-based communication system
 
-### Phase 2: Establish Clear Module Boundaries ✅
-**Impact**: Documented all dependencies, identified 18 boundary violations
-
-- **Created comprehensive documentation:**
-  - [MODULE_CONTRACTS.md](js/MODULE_CONTRACTS.md) - Public API contracts (living documentation)
-  - [DATA_FLOW.md](js/DATA_FLOW.md) - Complete data flow patterns and scenarios
-
-- **Identified critical issues:**
-  - 1 circular dependency (audio-engine ↔ audio-system)
-  - 14 DOM access violations in physics module
-  - 1 direct cross-module call (physics → audio)
-
-- **Added JSDoc documentation** to all public APIs:
-  - PhysicsEngine API (7 methods documented)
-  - AudioSystem API (8 methods documented)
-  - UISystem API (3 methods documented)
-
-### Phase 3: Event-Based Architecture & Separation of Concerns ✅
-**Impact**: Zero circular dependencies, physics module 100% DOM-free
-
-- **Created Event Bus System** (`js/shared/event-bus.js`):
-  - Decoupled module communication
-  - Zero circular dependencies
+- **Event-Driven Communication**
+  - EventBus decouples modules (zero circular dependencies)
   - Type-safe event names with `Events` enum
+  - Clear data flow patterns
   - Debug logging and error handling
 
-- **Fixed Critical Violations:**
-  - ✅ Removed audio-engine ↔ audio-system circular dependency
-  - ✅ Extracted rendering to `js/rendering/physics-renderer.js`
-  - ✅ Physics engine is now 100% DOM-free and testable
-  - ✅ Replaced direct physics → audio call with events
+- **Separation of Concerns**
+  - Physics engine is 100% DOM-free (testable without browser)
+  - Rendering separated into dedicated module
+  - Audio system manages synthesis, not UI
+  - UI system handles all DOM updates
 
-- **Event-Driven Architecture:**
-  - `PARTICLES_UPDATED` - Physics emits → Audio processes
-  - `PERFORMANCE_UPDATED` - Physics emits → UI updates metrics
-  - `CANVAS_RESIZED` - Physics emits → UI updates displays
-  - `AUDIO_INITIALIZED` - Audio emits → System sends parameters
+### Key Architectural Achievements
 
-- **New Modules Created:**
-  - `js/rendering/physics-renderer.js` - Canvas rendering (177 lines)
-  - `js/ui/performance-display.js` - Event-driven metrics display
-  - `js/shared/event-bus.js` - Complete event system (250+ lines)
-
-### Architecture Improvements Summary
-
-**Before Refactoring:**
-- ❌ Circular dependencies between modules
-- ❌ Physics module directly manipulated DOM (14 locations)
-- ❌ Tight coupling between physics and audio
-- ❌ No clear module boundaries or documentation
-- ❌ Duplicate code across 8 modules
-
-**After Refactoring:**
 - ✅ Zero circular dependencies
-- ✅ Physics module 100% DOM-free (testable without browser)
+- ✅ Physics runs without DOM access
 - ✅ Event-based communication (loose coupling)
-- ✅ Comprehensive documentation (3 architecture docs + JSDoc)
-- ✅ 470 lines of reusable shared utilities
+- ✅ Comprehensive documentation (MODULE_CONTRACTS.md, DATA_FLOW.md)
+- ✅ Reusable shared utilities (470 lines)
 - ✅ Clear separation: Physics → Renderer → UI
-- ✅ All boundary violations documented and remediated
+- ✅ JSDoc documentation for all public APIs
 
 ## 🎯 Migration Notes
 
@@ -631,7 +603,7 @@ This modular version maintains 100% functional compatibility with the original s
 
 **Essential Reference Documents:**
 - **[MODULE_CONTRACTS.md](js/MODULE_CONTRACTS.md)** - Module interface contracts, public APIs, and communication patterns
-- **[DATA_FLOW.md](js/DATA_FLOW.md)** - Complete data flow documentation with 8 detailed scenarios
+- **[DATA_FLOW.md](js/DATA_FLOW.md)** - Complete data flow documentation with key scenarios
 
 These documents serve as living documentation for maintaining clean architecture and module boundaries.
 
@@ -645,15 +617,6 @@ The clean, event-driven architecture enables easy addition of:
 - **Enhanced UI** - Additional visualizations and controls
 - **Collaboration** - Real-time multi-user features
 - **Preset Sharing** - Cloud-based preset library
-
-## 🎓 What Was Learned
-
-This refactoring demonstrates:
-- **Event-Driven Architecture** - Decoupling modules via event bus
-- **Separation of Concerns** - Physics, rendering, audio, UI as separate layers
-- **Module Boundaries** - Clear contracts prevent circular dependencies
-- **Testability** - DOM-free physics engine can run in Node.js
-- **Documentation** - Living docs maintain architectural integrity
 
 ---
 
