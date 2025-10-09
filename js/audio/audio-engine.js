@@ -4,7 +4,7 @@
  */
 
 import { WORKLET_PROCESSOR_CODE } from './worklet-processor.js';
-import { updateVolumeMeter } from './sample-manager.js';
+import { updateVolumeMeter } from '../ui/audio-controls.js';
 import { audioEngine, state } from '../config.js';
 import { Utils } from '../utils.js';
 import { setElementDisplay, updateElementText, safeGetElement } from '../shared/dom-utils.js';
@@ -178,6 +178,7 @@ export async function startAudioEngine() {
         // Setup message handling
         audioEngine.workletNode.port.onmessage = (event) => {
             if (event.data.type === 'particleCount') {
+                // Legacy message type - kept for backwards compatibility
                 audioEngine.activeParticleCount = event.data.count;
 
                 if (event.data.volumeLevel !== undefined) {
@@ -202,6 +203,15 @@ export async function startAudioEngine() {
                 if (event.data.cpuUsage !== null && event.data.cpuUsage !== undefined) {
                     eventBus.emit(Events.AUDIO_PERFORMANCE_UPDATED, {
                         audioCpuUsage: event.data.cpuUsage
+                    });
+                }
+
+                // Update volume meter with improved metering data
+                if (event.data.peakLevel !== undefined) {
+                    updateVolumeMeter({
+                        peakLevel: event.data.peakLevel,
+                        rmsLevel: event.data.rmsLevel,
+                        clipping: event.data.clipping
                     });
                 }
             }

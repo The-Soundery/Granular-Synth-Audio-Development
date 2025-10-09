@@ -40,7 +40,9 @@ export function setupAudioControlEventListeners() {
     const volumeScaleSlider = safeGetElement('volumeScale');
     if (volumeScaleSlider) {
         audioControlEventManager.add(volumeScaleSlider, 'input', (e) => {
-            updateElementText('volumeScale-value', e.target.value);
+            const dbValue = parseFloat(e.target.value);
+            const displayValue = dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`;
+            updateElementText('volumeScale-value', displayValue);
         });
     }
 
@@ -139,33 +141,62 @@ export function updateCurveGraph() {
     ctx.fillText(`x^${power.toFixed(1)}`, width - 40, 15);
 }
 
-export function updateVolumeMeter(volumeLevel) {
+export function updateVolumeMeter(volumeData) {
     const meter = safeGetElement('volumeMeter');
     const text = safeGetElement('volumeText');
+    const meterContainer = meter?.parentElement;
 
-    if (!meter || !text) return;
+    if (!meter || !text || !meterContainer) return;
 
-    // Apply logarithmic scaling for better visual representation
-    // Map 0.001 to 1% and 1.0 to 100% with logarithmic curve
-    let scaledLevel = 0;
-    if (volumeLevel > 0.001) {
-        // Logarithmic scale: log10(volumeLevel / 0.001) / log10(1000)
-        scaledLevel = Math.log10(volumeLevel / 0.001) / Math.log10(1000);
-        scaledLevel = Math.max(0, Math.min(1, scaledLevel));
+    // Extract peak and clipping status from volumeData
+    // Support both old format (number) and new format (object)
+    let peakLevel, isClipping;
+    if (typeof volumeData === 'number') {
+        // Legacy format - just peak level
+        peakLevel = volumeData;
+        isClipping = false;
+    } else {
+        // New format - object with peak, rms, and clipping
+        peakLevel = volumeData.peakLevel || 0;
+        isClipping = volumeData.clipping || false;
     }
 
-    const percentage = scaledLevel * 100;
+    // Convert peak level (0.0-1.0+) to percentage (0-100%+)
+    // No logarithmic scaling - use linear for accurate clipping detection
+    const percentage = Math.min(peakLevel * 100, 120); // Cap display at 120% for overload
 
     // Update meter width
     meter.style.width = percentage + '%';
 
-    // Update text with both raw and scaled values for debugging
-    text.textContent = Math.round(percentage) + '%';
+    // Dynamic color based on level with clipping detection
+    let meterColor;
+    let textColor = '#fff';
 
-    // Debug log to compare scaling
-    if (volumeLevel > 0.001 && Math.random() < 0.01) {
-        console.log('Volume Meter - raw:', volumeLevel.toFixed(4), 'scaled:', scaledLevel.toFixed(3), 'percentage:', percentage.toFixed(1) + '%');
+    if (isClipping || peakLevel >= 0.95) {
+        // Red: Clipping or danger zone (95-100%+)
+        meterColor = 'linear-gradient(to right, #FF5722, #D32F2F)';
+        textColor = '#fff';
+        text.textContent = 'CLIP';
+    } else if (peakLevel >= 0.8) {
+        // Orange: Warning zone (80-95%)
+        meterColor = 'linear-gradient(to right, #FFC107, #FF9800)';
+        textColor = '#000';
+        text.textContent = Math.round(percentage) + '%';
+    } else {
+        // Green: Safe zone (0-80%)
+        meterColor = 'linear-gradient(to right, #4CAF50, #66BB6A)';
+        textColor = '#fff';
+        text.textContent = Math.round(percentage) + '%';
     }
+
+    meter.style.background = meterColor;
+    text.style.color = textColor;
+
+    // Update ARIA attributes for accessibility
+    meterContainer.setAttribute('aria-valuenow', Math.round(percentage));
+    meterContainer.setAttribute('aria-label', isClipping ?
+        'Audio Level: Clipping detected' :
+        `Audio Level: ${Math.round(percentage)}%`);
 }
 
 export function updateWaveformDisplay(speciesIndex) {
@@ -370,20 +401,10 @@ export function createAudioSampleControls() {
         if (e.target.files[0]) {
             try {
                 await AudioSystem.loadSample(i, e.target.files[0]);
-                Utils.showToast(`✅ Sample loaded for Species ${String.fromCharCode(65 + i)}`, 2000);
-                // Update tab icon
-                const statusIcon = safeGetElement(`audio-status-${i}`);
-                if (statusIcon) {
-                    statusIcon.textContent = '🎵';
-                    statusIcon.title = 'Sample loaded';
-                }
+                // Success toast already shown by sample-manager.js
             } catch (error) {
+                // Error toast already shown by sample-manager.js with detailed message
                 console.error('Failed to load audio sample:', error);
-                if (error.message.includes('not initialized')) {
-                    Utils.showToast('⚠️ Please start the audio engine first', 3000);
-                } else {
-                    Utils.showToast(`❌ Failed to load sample: ${error.message}`, 4000);
-                }
             }
         }
     };
@@ -405,28 +426,34 @@ export function createAudioSampleControls() {
     // Audio controls in vertical layout - all sliders same width, values aligned
     const audioControlsGroup = Utils.createElement('div', 'audio-control-group');
 
-    // Volume control
+    // Volume control (dB scale)
     const volumeControlDiv = Utils.createElement('div', 'audio-control-row');
     const volumeLabel = Utils.createElement('label', 'audio-control-label');
-    volumeLabel.textContent = 'Volume';
+    volumeLabel.textContent = 'Volume (dB)';
 
     const volumeSliderContainer = Utils.createElement('div', 'audio-control-slider-container');
     const volumeSlider = Utils.createElement('input', 'slider');
     volumeSlider.type = 'range';
-    volumeSlider.min = '0.1';
-    volumeSlider.max = '2.0';
-    volumeSlider.step = '0.1';
-    volumeSlider.value = CONFIG.species.sampleVolumes[i] || 1.0;
+    volumeSlider.min = '-60';
+    volumeSlider.max = '12';
+    volumeSlider.step = '1';
+    // Convert linear to dB: dB = 20 * log10(linear)
+    const currentLinear = CONFIG.species.sampleVolumes[i] || 1.0;
+    const currentDB = currentLinear > 0 ? 20 * Math.log10(currentLinear) : -60;
+    volumeSlider.value = Math.max(-60, Math.min(12, currentDB));
     volumeSlider.id = `volume-${i}`;
 
     const volumeValue = Utils.createElement('span', 'audio-control-value');
-    volumeValue.textContent = (CONFIG.species.sampleVolumes[i] || 1.0).toFixed(1);
+    const dbValue = parseFloat(volumeSlider.value);
+    volumeValue.textContent = dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`;
     volumeValue.id = `volume-${i}-value`;
 
     const volumeHandler = (e) => {
-        const value = validateFloat(e.target.value, 0.1, 2.0);
-        CONFIG.species.sampleVolumes[i] = value;
-        volumeValue.textContent = value.toFixed(1);
+        const dbValue = validateFloat(e.target.value, -60, 12);
+        // Convert dB to linear: linear = 10^(dB/20)
+        const linearValue = Math.pow(10, dbValue / 20);
+        CONFIG.species.sampleVolumes[i] = linearValue;
+        volumeValue.textContent = dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`;
         AudioSystem.updateParameters({ audio: true });
         updateWaveformDisplay(i);
     };
