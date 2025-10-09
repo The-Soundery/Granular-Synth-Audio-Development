@@ -270,22 +270,22 @@ UI: audio-controls.js (EventListener on volume slider)
     │
     ├─→ Read slider.value (-60 to +12 dB)
     ├─→ Validate using validateFloat(value, -60, 12)
-    ├─→ Convert dB to linear: linearGain = 10^(dB / 20)
     ├─→ Update display text (show "dB" units, e.g., "+6.0 dB" or "-12.0 dB")
-    ├─→ WRITE to CONFIG.species.sampleVolumes[speciesIndex] (as linear value)
+    ├─→ WRITE to CONFIG.species.sampleVolumes[speciesIndex] (as dB value)
     │
     └─→ AudioSystem.updateParameters({ audio: true })
         │
         └─→ parameter-manager.js: updateAudioParameters()
-            ├─→ Read CONFIG.species.sampleVolumes array (linear values)
-            ├─→ Validate all volume values (0 to 4.0 linear)
+            ├─→ Read CONFIG.species.sampleVolumes array (dB values)
+            ├─→ Validate all volume values (-60 to 12 dB)
+            ├─→ Convert dB to linear: linearGain = 10^(dB / 20)
             │
             └─→ Send to worklet via batch update:
                 audioEngine.workletNode.port.postMessage({
                     type: 'batchParameterUpdate',
                     updates: {
                         audioParameters: {
-                            volumes: validatedVolumes
+                            volumes: validatedVolumes  // Linear values (converted from dB)
                         }
                     }
                 })
@@ -293,7 +293,7 @@ UI: audio-controls.js (EventListener on volume slider)
                     ▼
             AudioWorklet: worklet-processor.js receives message
                 │
-                ├─→ Store in this.sampleVolumes[species]
+                ├─→ Store in this.sampleVolumes[species] (linear values)
                 │
                 └─→ Applied during grain processing:
                     processGrain(grain, ...)
@@ -302,7 +302,7 @@ UI: audio-controls.js (EventListener on volume slider)
                             processedSample *= this.sampleVolumes[grain.species]
 ```
 
-**Implementation:** Volume uses professional dB scale in UI, converted to linear for audio processing
+**Implementation:** Volume uses professional dB scale in UI and storage, converted to linear only when sending to audio worklet
 
 ### 8. User Adjusts Master Volume
 
@@ -504,7 +504,7 @@ eventBus.on(Events.PERFORMANCE_UPDATED, (metrics) => updateDisplay(metrics));
 
 ### Grain Spawn Optimization
 - Longer grain minimum: 50ms (was 30ms)
-- Reduced overlap range: 1.2-2.5x (was 1.0-3.0x)
+- Reduced overlap range: 1.3-1.8x (was 1.0-3.0x)
 - Lower spawn rate cap: 60 grains/sec (was 100)
 - Result: 60% reduction in grain spawn rate while maintaining audio quality
 

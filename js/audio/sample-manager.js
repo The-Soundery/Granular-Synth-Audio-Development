@@ -52,7 +52,13 @@ export async function loadAudioSample(speciesIndex, file) {
             throw new Error('Invalid audio file: No audio data found');
         }
 
-        // Check duration (limit to 60 seconds)
+        // Check minimum duration (5 seconds required for smooth granular synthesis)
+        const minDuration = 5; // seconds
+        if (audioBuffer.duration < minDuration) {
+            throw new Error(`Audio file too short: ${audioBuffer.duration.toFixed(1)}s. Audio files must be at least ${minDuration} seconds long to ensure smooth granular synthesis`);
+        }
+
+        // Check maximum duration (limit to 60 seconds)
         const maxDuration = 60; // seconds
         if (audioBuffer.duration > maxDuration) {
             throw new Error(`Audio file too long: ${audioBuffer.duration.toFixed(1)}s. Maximum duration: ${maxDuration}s`);

@@ -146,9 +146,10 @@ Granular Particle Synth Project Folder/
 - **Motion-driven grain spawning** - Grains spawn only when particles are moving (velocity threshold)
 - **Trail-based smoothness control** - Trail length controls grain length and spawn rate for audio texture
 - **Velocity-to-volume mapping** - Grain volume controlled by velocity curve power for clear audiovisual connection
+- **Constant-power grain normalization** - Industry-standard 1/√N scaling prevents clipping while maintaining constant acoustic energy
 - **Optimized grain spawning** - 60% reduction in grain spawn rate while maintaining audio quality:
   - Longer grain minimum: 50ms (smoother with fewer spawns)
-  - Reduced overlap range: 1.2-2.5x (balanced smoothness and performance)
+  - Reduced overlap range: 1.3-1.8x (balanced smoothness and performance)
   - Lower spawn rate cap: 60 grains/sec (prevents CPU spikes)
 - **Pitch shifting** - Per-species pitch control (±24 semitones / ±2 octaves) via playback rate modulation
 - **Pre-filtered frequency bands** - Samples pre-processed at upload time:
