@@ -41,8 +41,8 @@ class GranularProcessor extends AudioWorkletProcessor {
         this.granularConfig = {
             grainLengthMin: 0.02,
             grainLengthMax: 0.5,
-            overlapMin: 0.5,
-            overlapMax: 4.0,
+            overlapMin: 1.3,
+            overlapMax: 1.8,
             velocityThreshold: 0.01,
             maxVelocity: 3.0,
             maxGrainRate: 200.0,
@@ -54,7 +54,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             freqRangeMax: 15000.0,
             freqGamma: 0.6,
             bandwidthOctavesMax: 4.0,
-            bandwidthRefHz: 1000,
             softLimiterThreshold: 0.98,
             softLimiterGain: 1.25
         };
@@ -498,7 +497,6 @@ class GranularProcessor extends AudioWorkletProcessor {
         let numStages = 0;
         let lowpassAlpha = 0;
         let highpassAlpha = 0;
-        let compensationGain = 1.0;
 
         if (this.frequencyBands[species] && this.numBands > 1) {
             // Pre-filtered bands enabled: select band based on Y-position
@@ -515,7 +513,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             const fc = f_min * Math.pow(f_max / f_min, Math.pow(y, gamma));
 
             const BW_oct = particleSize * this.granularConfig.bandwidthOctavesMax;
-            const BW_hz = fc * (Math.pow(2, BW_oct / 2) - Math.pow(2, -BW_oct / 2));
             const lowFreq = Math.max(f_min, fc * Math.pow(2, -BW_oct / 2));
             const highFreq = Math.min(f_max, fc * Math.pow(2, BW_oct / 2));
 
@@ -534,10 +531,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             // Pre-calculate filter alphas (for one-pole filters)
             lowpassAlpha = 1.0 - Math.exp(-2.0 * Math.PI * highFreqNorm);
             highpassAlpha = 1.0 - Math.exp(-2.0 * Math.PI * lowFreqNorm);
-
-            // Pre-calculate compensation gain
-            const BW_ref = this.granularConfig.bandwidthRefHz;
-            compensationGain = Math.min(Math.sqrt(BW_ref / BW_hz), 10.0);
         }
 
         // Create grain object
@@ -564,7 +557,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             filterNumStages: numStages,
             filterLowpassAlpha: lowpassAlpha,
             filterHighpassAlpha: highpassAlpha,
-            filterCompensationGain: compensationGain,
 
             // Grain lifecycle
             startTime: this.currentTime,
@@ -863,6 +855,13 @@ class GranularProcessor extends AudioWorkletProcessor {
         this.mixedGrainBuffer.fill(0, 0, bufferLength);
         this.tempFilterBuffer.fill(0, 0, bufferLength);
 
+        // Calculate constant-power normalization to prevent grain accumulation clipping
+        // Industry-standard approach: scale by 1/sqrt(N) to maintain constant acoustic power
+        const grainScaleFactor = this.activeGrains.length > 0
+            ? 1.0 / Math.sqrt(this.activeGrains.length)
+            : 1.0;
+        this.currentGrainScaleFactor = grainScaleFactor;
+
         // Process each grain
         for (let grainIndex = this.activeGrains.length - 1; grainIndex >= 0; grainIndex--) {
             const grain = this.activeGrains[grainIndex];
@@ -892,7 +891,8 @@ class GranularProcessor extends AudioWorkletProcessor {
             }
         }
 
-        // √N normalization removed - soft limiter provides adaptive protection instead
+        // Constant-power grain normalization applied per-grain (calculated above)
+        // Soft limiter remains as safety net for unexpected edge cases
 
         // Calculate volume level BEFORE soft limiter for accurate clipping detection
         let maxSample = 0;
@@ -1042,27 +1042,39 @@ class GranularProcessor extends AudioWorkletProcessor {
         const grainProgress = Math.min(grainAge / grain.duration, 1.0);
 
         if (grain.isReleasing) {
-            // Release envelope
+            // Release envelope with Hann window (for voice stealing / forced release)
+            // Use same smooth cosine curve as natural grain release to prevent clicks
             const releaseElapsed = this.currentTime - grain.releaseStartTime;
             const releaseProgress = Math.min(releaseElapsed / grain.releaseTime, 1.0);
-            envelopeGain = 1.0 - releaseProgress;
+            envelopeGain = 0.5 * (1.0 + Math.cos(Math.PI * releaseProgress));
         } else {
-            // PHASE 3 OPTIMIZATION: Adaptive envelope based on overlap factor
-            // More overlap = longer fades for smooth sound, less overlap = shorter fades to prevent clicks
-            // BUGFIX: Increased base envelope from 0.15 → 0.20 to prevent clicks at low trails
-            // Low overlap (1.2x, trails=0.05) → 20% envelope minimum
-            // High overlap (2.5x, trails=1.0) → 40% envelope (capped at 0.45 or 45%)
-            const baseEnvelopeTime = 0.20;
-            const envelopeScale = Math.min(grain.overlapFactor / 1.2, 2.25);
-            const attackTime = Math.min(baseEnvelopeTime * envelopeScale, 0.45);
-            const releaseTime = attackTime; // Symmetric envelope
+            // PHASE 4 OPTIMIZATION: Hann window envelope with auto-clamping (15-150ms range)
+            // Raised cosine envelope eliminates clicks from linear ramp discontinuities
+            // Formula: 0.5 * (1.0 - cos(π * progress))
+            // Auto-clamping: 15ms minimum (prevents clicks), 150ms maximum (prevents overkill)
+            // Target: ~30% of grain duration, naturally bounded to 15-150ms absolute times
+
+            // Calculate envelope time in seconds (30% of grain duration)
+            const rawEnvelopeTime = 0.30 * grain.duration; // 30% of grain
+
+            // Clamp envelope time to 15-150ms range
+            const minEnvelopeTime = 0.015; // 15ms
+            const maxEnvelopeTime = 0.150; // 150ms
+            const envelopeTimeSeconds = Math.max(minEnvelopeTime, Math.min(maxEnvelopeTime, rawEnvelopeTime));
+
+            // Convert to progress percentage (0.0 to 1.0) relative to grain duration
+            const envelopeTime = envelopeTimeSeconds / grain.duration;
+            const attackTime = envelopeTime;
+            const releaseTime = envelopeTime; // Symmetric envelope
 
             if (grainProgress < attackTime) {
-                // Attack phase: linear fade in
-                envelopeGain = grainProgress / attackTime;
+                // Attack phase: Hann window fade in (raised cosine)
+                const attackProgress = grainProgress / attackTime; // 0.0 → 1.0
+                envelopeGain = 0.5 * (1.0 - Math.cos(Math.PI * attackProgress));
             } else if (grainProgress > (1.0 - releaseTime)) {
-                // Release phase: linear fade out
-                envelopeGain = (1.0 - grainProgress) / releaseTime;
+                // Release phase: Hann window fade out (raised cosine)
+                const releaseProgress = (grainProgress - (1.0 - releaseTime)) / releaseTime; // 0.0 → 1.0
+                envelopeGain = 0.5 * (1.0 + Math.cos(Math.PI * releaseProgress));
             } else {
                 // Sustain phase: full volume
                 envelopeGain = 1.0;
@@ -1114,8 +1126,11 @@ class GranularProcessor extends AudioWorkletProcessor {
                 filteredSample = this.applyFrequencyBandFilter(processedSample, grain);
             }
 
+            // Apply constant-power grain normalization to prevent clipping
+            const normalizedSample = filteredSample * this.currentGrainScaleFactor;
+
             // Apply stereo panning and add to output
-            this.addToStereoOutput(filteredSample, grain.xPosition, output, i);
+            this.addToStereoOutput(normalizedSample, grain.xPosition, output, i);
         }
 
         return false; // Keep grain
@@ -1196,9 +1211,6 @@ class GranularProcessor extends AudioWorkletProcessor {
             highpassed = state.y1;
         }
         filtered = filtered - highpassed;
-
-        // Apply pre-calculated compensation gain
-        filtered *= grain.filterCompensationGain;
 
         return filtered;
     }

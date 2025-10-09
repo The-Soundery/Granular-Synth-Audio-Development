@@ -28,8 +28,8 @@ export const CONFIG = {
             {start: 0, end: 1}, {start: 0, end: 1}, {start: 0, end: 1}, {start: 0, end: 1},
             {start: 0, end: 1}, {start: 0, end: 1}, {start: 0, end: 1}, {start: 0, end: 1}
         ],
-        // Per-species volume adjustments (0.1 to 2.0)
-        sampleVolumes: [1, 1, 1, 1, 1, 1, 1, 1],
+        // Per-species volume adjustments in dB (-60 to +12)
+        sampleVolumes: [0, 0, 0, 0, 0, 0, 0, 0],
         // Per-species pitch adjustments in semitones (-12 to +12)
         samplePitches: [0, 0, 0, 0, 0, 0, 0, 0],
         // Per-species voice limits for CPU management
@@ -87,8 +87,8 @@ export const CONFIG = {
 
         // Overlap factor range (controls grain spawn rate via overlapFactor / grainLength)
         // PHASE 2 OPTIMIZATION: Further reduced for aggressive CPU savings
-        overlapMin: 1.2,         // 1.2x overlap (was 1.0) - just enough for smooth audio
-        overlapMax: 2.5,         // 2.5x overlap (was 3.0) - smooth trails, less CPU
+        overlapMin: 1.3,         // 1.3x overlap - slightly smoother at low trails
+        overlapMax: 1.8,         // 1.8x overlap - less CPU at high trails, still smooth
 
         // Motion detection
         // PHASE 3 OPTIMIZATION: Threshold skips nearly-still particles + gain ramping for soft start
@@ -109,14 +109,13 @@ export const CONFIG = {
         freqRangeMax: 15000.0,    // Hz, maximum frequency
         freqGamma: 0.6,           // Low-end emphasis (< 1.0 extends low-freq resolution)
         bandwidthOctavesMax: 4.0, // maximum bandwidth in octaves
-        bandwidthRefHz: 1000,     // reference bandwidth for amplitude normalization (Hz)
 
         // PHASE 3 OPTIMIZATION: Pre-filtered frequency bands
         usePreFilteredBands: true,  // Enable pre-filtered audio bands (eliminates runtime filtering)
         numFrequencyBands: 10,      // Number of frequency bands to pre-compute (10 = ~200 cent resolution)
 
-        // Mixing
-        softLimiterThreshold: 0.8, // soft limiting threshold
+        // Mixing (constant-power normalization prevents clipping, soft limiter is safety net)
+        softLimiterThreshold: 0.8, // soft limiting threshold (rarely triggered)
         softLimiterGain: 1.25      // soft limiter output gain
     },
 

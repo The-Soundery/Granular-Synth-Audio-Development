@@ -222,7 +222,9 @@ export function updateWaveformDisplay(speciesIndex) {
 
     for (let i = 0; i < data.length; i++) {
         // Apply volume scaling to show visual effect of volume adjustment
-        const volumeScale = CONFIG.species.sampleVolumes[speciesIndex] || 1.0;
+        // Convert dB to linear: linear = 10^(dB/20)
+        const volumeDB = CONFIG.species.sampleVolumes[speciesIndex] || 0;
+        const volumeScale = Math.pow(10, volumeDB / 20);
         const v = data[i] * 0.5 * volumeScale; // Scale amplitude with volume adjustment
         const y = (v + 1) * canvas.height / 2; // Center and scale to canvas height
 
@@ -437,27 +439,29 @@ export function createAudioSampleControls() {
     volumeSlider.min = '-60';
     volumeSlider.max = '12';
     volumeSlider.step = '1';
-    // Convert linear to dB: dB = 20 * log10(linear)
-    const currentLinear = CONFIG.species.sampleVolumes[i] || 1.0;
-    const currentDB = currentLinear > 0 ? 20 * Math.log10(currentLinear) : -60;
-    volumeSlider.value = Math.max(-60, Math.min(12, currentDB));
+    volumeSlider.value = CONFIG.species.sampleVolumes[i] || 0;
     volumeSlider.id = `volume-${i}`;
 
     const volumeValue = Utils.createElement('span', 'audio-control-value');
-    const dbValue = parseFloat(volumeSlider.value);
-    volumeValue.textContent = dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`;
+    const currentDB = CONFIG.species.sampleVolumes[i] || 0;
+    volumeValue.textContent = currentDB > 0 ? `+${currentDB.toFixed(1)} dB` : `${currentDB.toFixed(1)} dB`;
     volumeValue.id = `volume-${i}-value`;
 
     const volumeHandler = (e) => {
-        const dbValue = validateFloat(e.target.value, -60, 12);
-        // Convert dB to linear: linear = 10^(dB/20)
-        const linearValue = Math.pow(10, dbValue / 20);
-        CONFIG.species.sampleVolumes[i] = linearValue;
-        volumeValue.textContent = dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`;
-        AudioSystem.updateParameters({ audio: true });
-        updateWaveformDisplay(i);
+        // Match working slider pattern - write to CONFIG, read from CONFIG for display
+        CONFIG.species.sampleVolumes[i] = validateFloat(e.target.value, -60, 12);
+        const dbValue = CONFIG.species.sampleVolumes[i];
+        updateElementText(`volume-${i}-value`,
+            dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`);
     };
     sampleControlEventManager.add(volumeSlider, 'input', volumeHandler);
+
+    // Update waveform and audio parameters only on final value (not during drag)
+    const volumeChangeHandler = () => {
+        updateWaveformDisplay(i);
+        AudioSystem.updateParameters({ audio: true });
+    };
+    sampleControlEventManager.add(volumeSlider, 'change', volumeChangeHandler);
 
     volumeSliderContainer.appendChild(volumeSlider);
     volumeSliderContainer.appendChild(volumeValue);
@@ -484,12 +488,18 @@ export function createAudioSampleControls() {
     pitchValue.id = `pitch-${i}-value`;
 
     const pitchHandler = (e) => {
-        const value = validateInt(e.target.value, -24, 24);
-        CONFIG.species.samplePitches[i] = value;
-        pitchValue.textContent = value > 0 ? `+${value}` : `${value}`;
-        AudioSystem.updateParameters({ audio: true });
+        // Match working slider pattern - only update display during drag
+        CONFIG.species.samplePitches[i] = validateInt(e.target.value, -24, 24);
+        const value = CONFIG.species.samplePitches[i];
+        updateElementText(`pitch-${i}-value`, value > 0 ? `+${value}` : `${value}`);
     };
     sampleControlEventManager.add(pitchSlider, 'input', pitchHandler);
+
+    // Update audio parameters only on final value (not during drag)
+    const pitchChangeHandler = () => {
+        AudioSystem.updateParameters({ audio: true });
+    };
+    sampleControlEventManager.add(pitchSlider, 'change', pitchChangeHandler);
 
     pitchSliderContainer.appendChild(pitchSlider);
     pitchSliderContainer.appendChild(pitchValue);
@@ -523,12 +533,18 @@ export function createAudioSampleControls() {
     voicesValue.id = `voices-${i}-value`;
 
     const voicesHandler = (e) => {
-        const value = validateInt(e.target.value, 1, particleCount);
-        CONFIG.species.maxVoicesPerSpecies[i] = value;
-        voicesValue.textContent = value;
-        AudioSystem.updateParameters({ voices: true });
+        // Match working slider pattern - only update display during drag
+        CONFIG.species.maxVoicesPerSpecies[i] = validateInt(e.target.value, 1, particleCount);
+        const value = CONFIG.species.maxVoicesPerSpecies[i];
+        updateElementText(`voices-${i}-value`, value);
     };
     sampleControlEventManager.add(voicesSlider, 'input', voicesHandler);
+
+    // Update audio parameters only on final value (not during drag)
+    const voicesChangeHandler = () => {
+        AudioSystem.updateParameters({ voices: true });
+    };
+    sampleControlEventManager.add(voicesSlider, 'change', voicesChangeHandler);
 
     voicesSliderContainer.appendChild(voicesSlider);
     voicesSliderContainer.appendChild(voicesValue);
@@ -558,6 +574,40 @@ export function createAudioSampleControls() {
 function setupWaveformInteraction(canvas, speciesIndex) {
     let isDraggingRange = false;
 
+    // Helper to enforce minimum 600ms selection (prevents grain breaking)
+    // Minimum selection = 600ms (allows 500ms max grain + 100ms safety margin)
+    const enforceMinimumSelection = (start, end) => {
+        const audioBuffer = CONFIG.species.audioBuffers[speciesIndex];
+        if (!audioBuffer) return { start, end }; // No buffer loaded yet
+
+        const minSelectionSeconds = 0.6; // 600ms minimum
+        const bufferDuration = audioBuffer.duration;
+        const selectedDuration = (end - start) * bufferDuration;
+
+        if (selectedDuration < minSelectionSeconds) {
+            // Selection too small - auto-expand around center
+            const center = (start + end) / 2;
+            const minSelectionNormalized = minSelectionSeconds / bufferDuration;
+            const halfRange = minSelectionNormalized / 2;
+
+            let newStart = center - halfRange;
+            let newEnd = center + halfRange;
+
+            // Clamp to buffer boundaries
+            if (newStart < 0) {
+                newStart = 0;
+                newEnd = Math.min(minSelectionNormalized, 1);
+            } else if (newEnd > 1) {
+                newEnd = 1;
+                newStart = Math.max(0, 1 - minSelectionNormalized);
+            }
+
+            return { start: newStart, end: newEnd };
+        }
+
+        return { start, end };
+    };
+
     const handleMouseDown = (e) => {
         isDraggingRange = true;
         const position = getCanvasPosition(e, canvas);
@@ -571,12 +621,31 @@ function setupWaveformInteraction(canvas, speciesIndex) {
         if (!isDraggingRange) return;
         const endPosition = getCanvasPosition(e, canvas);
         const startPos = CONFIG.species.sampleRanges[speciesIndex].start;
-        CONFIG.species.sampleRanges[speciesIndex].end = clamp(endPosition, startPos + 0.01, 1);
+
+        // Apply minimum selection enforcement
+        const rawEnd = clamp(endPosition, startPos + 0.01, 1);
+        const adjusted = enforceMinimumSelection(startPos, rawEnd);
+
+        CONFIG.species.sampleRanges[speciesIndex].start = adjusted.start;
+        CONFIG.species.sampleRanges[speciesIndex].end = adjusted.end;
+
         updateWaveformDisplay(speciesIndex);
         AudioSystem.updateParameters({ ranges: true });
     };
 
     const handleMouseUp = () => {
+        if (isDraggingRange) {
+            // Final validation on mouse up
+            const range = CONFIG.species.sampleRanges[speciesIndex];
+            const adjusted = enforceMinimumSelection(range.start, range.end);
+
+            if (adjusted.start !== range.start || adjusted.end !== range.end) {
+                CONFIG.species.sampleRanges[speciesIndex].start = adjusted.start;
+                CONFIG.species.sampleRanges[speciesIndex].end = adjusted.end;
+                updateWaveformDisplay(speciesIndex);
+                AudioSystem.updateParameters({ ranges: true });
+            }
+        }
         isDraggingRange = false;
     };
 

@@ -19,9 +19,8 @@ export function validateAudioParameter(type, value) {
         case 'curveParameter':
             return validateFloat(value, 0.1, 4.0);
         case 'volume':
-            // Volume is now stored as linear (converted from dB in UI)
-            // Allow full range from silence (0) to +12dB (3.98)
-            return validateFloat(value, 0, 4.0);
+            // Volume is now stored in dB (-60 to +12)
+            return validateFloat(value, -60, 12);
         case 'pitch':
             return validateInt(value, -24, 24);
         case 'voices':
@@ -64,9 +63,12 @@ export function updateAudioParameters(config = {}) {
         }
 
         if (config.audio || config.all) {
-            // Validate audio parameters
-            const validatedVolumes = CONFIG.species.sampleVolumes.map(vol =>
-                validateAudioParameter('volume', vol));
+            // Validate audio parameters and convert dB to linear for worklet
+            const validatedVolumes = CONFIG.species.sampleVolumes.map(volDB => {
+                const validatedDB = validateAudioParameter('volume', volDB);
+                // Convert dB to linear: linear = 10^(dB/20)
+                return Math.pow(10, validatedDB / 20);
+            });
             const validatedPitches = CONFIG.species.samplePitches.map(pitch =>
                 validateAudioParameter('pitch', pitch));
             updates.audioParameters = {
