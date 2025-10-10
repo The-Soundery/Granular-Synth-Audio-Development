@@ -453,6 +453,14 @@ export function createAudioSampleControls() {
         const dbValue = CONFIG.species.sampleVolumes[i];
         updateElementText(`volume-${i}-value`,
             dbValue > 0 ? `+${dbValue.toFixed(1)} dB` : `${dbValue.toFixed(1)} dB`);
+
+        // Live waveform update during drag (throttled via RAF for performance)
+        if (!volumeHandler._rafId) {
+            volumeHandler._rafId = requestAnimationFrame(() => {
+                updateWaveformDisplay(i);
+                volumeHandler._rafId = null;
+            });
+        }
     };
     sampleControlEventManager.add(volumeSlider, 'input', volumeHandler);
 
@@ -573,6 +581,7 @@ export function createAudioSampleControls() {
 // Setup waveform canvas interaction
 function setupWaveformInteraction(canvas, speciesIndex) {
     let isDraggingRange = false;
+    let dragStartPosition = 0; // Track initial mouse down position
 
     // Helper to enforce minimum 600ms selection (prevents grain breaking)
     // Minimum selection = 600ms (allows 500ms max grain + 100ms safety margin)
@@ -582,7 +591,7 @@ function setupWaveformInteraction(canvas, speciesIndex) {
 
         const minSelectionSeconds = 0.6; // 600ms minimum
         const bufferDuration = audioBuffer.duration;
-        const selectedDuration = (end - start) * bufferDuration;
+        const selectedDuration = Math.abs(end - start) * bufferDuration;
 
         if (selectedDuration < minSelectionSeconds) {
             // Selection too small - auto-expand around center
@@ -611,7 +620,9 @@ function setupWaveformInteraction(canvas, speciesIndex) {
     const handleMouseDown = (e) => {
         isDraggingRange = true;
         const position = getCanvasPosition(e, canvas);
-        CONFIG.species.sampleRanges[speciesIndex].start = clamp(position, 0, 1);
+        dragStartPosition = clamp(position, 0, 1);
+        CONFIG.species.sampleRanges[speciesIndex].start = dragStartPosition;
+        CONFIG.species.sampleRanges[speciesIndex].end = dragStartPosition;
         updateWaveformDisplay(speciesIndex);
         AudioSystem.updateParameters({ ranges: true });
         e.preventDefault();
@@ -619,15 +630,19 @@ function setupWaveformInteraction(canvas, speciesIndex) {
 
     const handleMouseMove = (e) => {
         if (!isDraggingRange) return;
-        const endPosition = getCanvasPosition(e, canvas);
-        const startPos = CONFIG.species.sampleRanges[speciesIndex].start;
+        const currentPosition = getCanvasPosition(e, canvas);
+        const clampedPosition = clamp(currentPosition, 0, 1);
 
-        // Apply minimum selection enforcement
-        const rawEnd = clamp(endPosition, startPos + 0.01, 1);
-        const adjusted = enforceMinimumSelection(startPos, rawEnd);
-
-        CONFIG.species.sampleRanges[speciesIndex].start = adjusted.start;
-        CONFIG.species.sampleRanges[speciesIndex].end = adjusted.end;
+        // Support bidirectional dragging
+        if (clampedPosition < dragStartPosition) {
+            // Dragging left: current position becomes start
+            CONFIG.species.sampleRanges[speciesIndex].start = clampedPosition;
+            CONFIG.species.sampleRanges[speciesIndex].end = dragStartPosition;
+        } else {
+            // Dragging right: drag start becomes start
+            CONFIG.species.sampleRanges[speciesIndex].start = dragStartPosition;
+            CONFIG.species.sampleRanges[speciesIndex].end = clampedPosition;
+        }
 
         updateWaveformDisplay(speciesIndex);
         AudioSystem.updateParameters({ ranges: true });
@@ -644,6 +659,13 @@ function setupWaveformInteraction(canvas, speciesIndex) {
                 CONFIG.species.sampleRanges[speciesIndex].end = adjusted.end;
                 updateWaveformDisplay(speciesIndex);
                 AudioSystem.updateParameters({ ranges: true });
+
+                // Notify user that selection was too small and was auto-expanded
+                const audioBuffer = CONFIG.species.audioBuffers[speciesIndex];
+                if (audioBuffer) {
+                    const userSelectionMs = Math.round((range.end - range.start) * audioBuffer.duration * 1000);
+                    console.warn(`⚠️ Selection too small (${userSelectionMs}ms). Minimum is 600ms. Auto-expanded to minimum length.`);
+                }
             }
         }
         isDraggingRange = false;

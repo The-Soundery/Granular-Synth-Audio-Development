@@ -62,9 +62,8 @@ class GranularProcessor extends AudioWorkletProcessor {
         this.currentTime = 0;
 
         // Volume metering - improved for accurate clipping detection
-        this.peakLevel = 0;          // Peak sample value
+        this.peakLevel = 0;          // Peak sample value (instantaneous, no smoothing)
         this.rmsLevel = 0;            // RMS (average power) level
-        this.peakDecay = 0.98;        // Slower decay for smoother peak reading
         this.rmsDecay = 0.95;         // Decay for RMS
         this.rmsWindowSize = 128;     // Sample window for RMS calculation
         this.rmsBuffer = new Float32Array(this.rmsWindowSize);
@@ -905,8 +904,8 @@ class GranularProcessor extends AudioWorkletProcessor {
             }
         }
 
-        // Update peak level with decay (slower for smoother visual feedback)
-        this.peakLevel = Math.max(maxSample, this.peakLevel * this.peakDecay);
+        // Update peak level with no decay for instant responsiveness
+        this.peakLevel = maxSample;
 
         // Calculate RMS (Root Mean Square) - average power level
         const currentRMS = Math.sqrt(sumSquares / (bufferLength * outputChannels));

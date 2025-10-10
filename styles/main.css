@@ -837,7 +837,7 @@ button {
 }
 
 .audio-control-value {
-    min-width: 45px;
+    width: 65px;
     flex-shrink: 0;
     text-align: right;
     color: var(--tertiary-color);
